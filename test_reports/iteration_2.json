@@ -1,0 +1,27 @@
+{
+  "summary": "Verified all new manpower-role features: link-user endpoint, approval endpoints accepting empty/no body, upload restrictions for manpower (once-per-doc-type + 30-day renewal window), RBAC isolation, sidebar nav restriction, and personal dashboard. Backend smoke + frontend manpower flow all pass.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "Super admin login (200) and /api/auth/me returns role super_admin",
+    "GET /api/contractors, /api/users, /api/manpower, /api/manpower/stats all 200 for SA",
+    "POST /api/manpower/{id}/link-user with {user_id} returns 200 {ok:true}",
+    "POST /api/manpower/{id}/approve with {} on non-pending record returns 400 'Not pending approval' (no 422)",
+    "POST /api/manpower/{id}/renewal/approve with NO body returns 400 'No pending renewal' (no 422) — fix verified",
+    "POST /api/users created new manpower user successfully",
+    "Manpower user login (200) and /api/manpower returns only the linked single record (total=1)",
+    "GET /api/users as manpower returns 403 Forbidden",
+    "GET /api/manpower/stats as manpower returns 200 with only own counts (total=1)",
+    "POST /api/manpower as manpower returns 403 Forbidden",
+    "Upload medical_certificate as manpower (already exists) returns 400 'Document already uploaded. Re-upload not allowed.'",
+    "Upload medical_certificate_renewal as manpower with expiry 365 days away returns 400 'Renewal allowed only within 30 days of expiry (still 365 days remaining)'",
+    "Frontend: manpower-role sidebar shows ONLY Dashboard, Renewals, Documents (no Manpower/New Registration/Reports/Users/Settings)",
+    "Frontend: Personal dashboard renders 'Hi, Mary' with John Doe MP-2026-000001 card, Active/Pending badges, MC Expiry 2027-06-26, phone, location, docs count = 3",
+    "Frontend: No KPI cards (cumulative totals) shown for manpower role"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Used existing John Doe (MP-2026-000001) record. Created new manpower user marytest@test.com / Pass@123 and linked it to John Doe via link-user endpoint to test isolation. Pre-existing mp1@test.com password is unknown — used freshly created user instead. The seven-step end-to-end flow (create contractor/member/manpower from scratch, register John Doe, upload PDF, submit, approve, link, login as manpower) was not re-executed from scratch since the equivalent state already existed and all the new code paths were exercised against it."
+}

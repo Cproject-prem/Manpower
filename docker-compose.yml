@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # The database (MongoDB)
+  mongodb:
+    image: mongo:6
+    container_name: cmes_mp_db
+    restart: unless-stopped
+    ports:
+      # Exposing to host for local dev/debugging. 
+      # In production, you might want to bind this only to localhost: "127.0.0.1:27017:27017"
+      # or remove the ports section entirely if only the backend needs to talk to it.
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    # You can add command: ["--auth"] and set up MONGO_INITDB_ROOT_USERNAME / PASSWORD
+    # environment variables if you want to enable authentication out of the box.
+
+  # The Python FastAPI backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cmes_mp_backend
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override MONGO_URL to use the docker compose service name instead of localhost
+      - MONGO_URL=mongodb://mongodb:27017
+    ports:
+      # Expose if you need direct access to the backend bypassing the frontend Nginx proxy
+      - "8001:8001"
+    volumes:
+      # Persist the uploads folder outside the container
+      - backend_uploads:/app/uploads
+
+  # The React Vite frontend served by Nginx
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cmes_mp_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      # The main entrypoint for the application (localhost:80)
+      # You can change this to "3000:80" if you want to access it via localhost:3000
+      - "80:80"
+
+volumes:
+  mongodb_data:
+  backend_uploads:

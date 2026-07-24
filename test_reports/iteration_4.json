@@ -1,0 +1,39 @@
+{
+  "summary": "Tested new Users edit dialog, member reset-password flow, Renewals page rename, and New Registration form date fields. Backend RBAC for PUT /api/users/{id} and POST /api/users/{id}/reset-password is fully correct. UI works for member reset flow and admin/member roles. Found one regression: editing a super_admin user via the UI Save button returns 422 because frontend sends role='super_admin' but backend UserUpdate.role Literal only allows admin/member/manpower.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "super_admin login + member login work; sidebar respects roles",
+    "PUT /api/users/{id} as super_admin updates name/phone of member (200)",
+    "PUT /api/users/{id} as admin updates manpower phone (200)",
+    "PUT /api/users/{id} as admin on an admin target returns 403",
+    "PUT /api/users/{id} as admin trying role='admin' returns 403",
+    "POST /api/users/{id}/reset-password as member for LINKED manpower returns 200",
+    "POST /api/users/{id}/reset-password as member for UNLINKED manpower returns 403 ('Not your manpower')",
+    "POST /api/users/{id}/reset-password as member for non-manpower (admin) returns 403",
+    "Users page (super_admin): 9 edit-{id} buttons render; clicking opens dialog with edit-user-name/phone/role/contractor testids",
+    "Users page (member): only reset-pw-{id} buttons visible; no edit/toggle/delete buttons; reset modal submits and backend returns 200",
+    "/renewals page renders with heading 'Renewal Required' and renewals-page testid",
+    "/manpower/new form contains field-height_work_expiry_date and field-safety_belt_expiry_date date inputs"
+  ],
+  "failed": [
+    {
+      "area": "Users edit dialog (frontend ↔ backend contract)",
+      "issue": "Saving the Edit dialog for a super_admin user returns HTTP 422. saveEditUser in Users.jsx posts {role: 'super_admin', ...} but backend UserUpdate.role Literal only allows 'admin'|'member'|'manpower'. Pydantic rejects with literal_error.",
+      "evidence": "Reproduced via UI (PUT /users/<id> status: 422) and curl: PUT /api/users/<sa_id> body={\"role\":\"super_admin\",...} -> 422 {\"detail\":[{\"type\":\"literal_error\",\"loc\":[\"body\",\"role\"],\"msg\":\"Input should be 'admin', 'member' or 'manpower'\"}]}",
+      "priority": "HIGH"
+    },
+    {
+      "area": "Renewals page badges",
+      "issue": "Zero needs-{mid}-{field} badges visible on /renewals during this test. Data set currently has only one approved manpower whose medical was just renewed to 2027 and no manpower with height_work / safety_belt expiry within renewal window, so 0 badges may be expected. Could not positively verify badge rendering with real data.",
+      "evidence": "page.query_selector_all('[data-testid^=\"needs-\"]') returned 0 on /renewals as super_admin",
+      "priority": "LOW"
+    }
+  ],
+  "action_items": [
+    "Fix Users.jsx saveEditUser to either (a) omit `role` from the PUT body when target.role === 'super_admin' (or when unchanged), or (b) extend backend UserUpdate.role Literal to include 'super_admin' (super_admin-only enforcement is already in update_user logic). Option (a) is safer.",
+    "Optionally seed/create a manpower with height_work_expiry_date or safety_belt_expiry_date within 30 days (or expired) to positively confirm Renewals badges render with needs-{mid}-{field} testids."
+  ],
+  "success_rate": {"backend": "100% (7/7 endpoint cases)", "frontend": "~85% (edit-save broken for super_admin target; renewals badges not exercised)"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

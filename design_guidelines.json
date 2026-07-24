@@ -1,0 +1,134 @@
+{
+  "theme": "Light",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "vibe": "Professional, authoritative, data-dense, scannable, operational",
+  "typography": {
+    "fonts": {
+      "headings": "Cabinet Grotesk, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "monospace": "JetBrains Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl tracking-tight font-semibold text-zinc-900",
+      "h2": "text-2xl sm:text-3xl tracking-tight font-medium text-zinc-900",
+      "h3": "text-xl sm:text-2xl tracking-tight font-medium text-zinc-900",
+      "h4": "text-lg sm:text-xl font-medium text-zinc-900",
+      "body": "text-sm text-zinc-700 leading-relaxed",
+      "small_label": "text-xs font-medium uppercase tracking-[0.05em] text-zinc-500",
+      "id_number": "font-mono text-sm tracking-tight text-zinc-900 bg-zinc-100 px-1.5 py-0.5 rounded-md border border-zinc-200"
+    }
+  },
+  "colors": {
+    "background": {
+      "app": "bg-zinc-50",
+      "surface": "bg-white",
+      "sidebar": "bg-zinc-900 text-white"
+    },
+    "text": {
+      "primary": "text-zinc-900",
+      "secondary": "text-zinc-600",
+      "muted": "text-zinc-400"
+    },
+    "border": {
+      "default": "border-zinc-200",
+      "strong": "border-zinc-300"
+    },
+    "brand": {
+      "primary": "bg-zinc-900 hover:bg-zinc-800 text-white",
+      "secondary": "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50"
+    },
+    "status": {
+      "draft": "bg-zinc-100 text-zinc-700 border-zinc-200",
+      "pending_approval": "bg-amber-50 text-amber-700 border-amber-200",
+      "approved": "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "rejected": "bg-rose-50 text-rose-700 border-rose-200",
+      "active": "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "expiring_soon": "bg-orange-50 text-orange-700 border-orange-200",
+      "expired": "bg-rose-50 text-rose-700 border-rose-200",
+      "renewal_pending": "bg-blue-50 text-blue-700 border-blue-200"
+    },
+    "documents": {
+      "complete": "bg-emerald-50 text-emerald-700 border-emerald-200",
+      "pending": "bg-amber-50 text-amber-700 border-amber-200",
+      "expired": "bg-rose-50 text-rose-700 border-rose-200",
+      "renewal_pending": "bg-blue-50 text-blue-700 border-blue-200"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "section": "py-8 px-6 sm:px-8",
+      "widget_gap": "gap-4 sm:gap-6",
+      "container_padding": "p-6"
+    },
+    "structure": {
+      "sidebar": "w-64 fixed inset-y-0 left-0 z-40 bg-zinc-900 border-r border-zinc-800 flex flex-col",
+      "header": "h-16 border-b border-zinc-200 bg-white flex items-center justify-between px-6 sticky top-0 z-30",
+      "main_content": "ml-64 min-h-screen bg-zinc-50 pt-16"
+    },
+    "bento_grid": {
+      "kpi_cards": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"
+    }
+  },
+  "surfaces": {
+    "cards": "bg-white border border-zinc-200 rounded-lg shadow-sm overflow-hidden",
+    "modals": "bg-white border border-zinc-200 rounded-xl shadow-xl",
+    "tables": "w-full text-left border-collapse text-sm",
+    "table_header": "bg-zinc-50 border-y border-zinc-200 text-zinc-600 font-medium py-3 px-4",
+    "table_cell": "border-b border-zinc-100 py-3 px-4 text-zinc-900"
+  },
+  "components": {
+    "button": {
+      "base": "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-900 disabled:opacity-50 disabled:pointer-events-none data-testid",
+      "primary": "bg-zinc-900 text-white hover:bg-zinc-800 shadow-sm",
+      "outline": "border border-zinc-200 bg-transparent hover:bg-zinc-50 text-zinc-900",
+      "ghost": "bg-transparent hover:bg-zinc-100 text-zinc-900"
+    },
+    "input": "flex h-9 w-full rounded-md border border-zinc-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-900 disabled:cursor-not-allowed disabled:opacity-50",
+    "badge": "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium transition-colors",
+    "avatar": "h-8 w-8 rounded-full overflow-hidden bg-zinc-100 border border-zinc-200"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "instructions": "Use lucide-react. Keep stroke-width to 1.5 or 2 for clarity. Use standard icons (Users, FileText, AlertCircle, CheckCircle, Clock, Shield, Settings, LayoutDashboard, Download)."
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/9683980/pexels-photo-9683980.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "logo_placeholder",
+        "description": "Geometric building to serve as a placeholder company logo/login background."
+      },
+      {
+        "url": "https://images.pexels.com/photos/10816007/pexels-photo-10816007.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "avatar_placeholder",
+        "description": "Professional headshot for user avatars and manpower profile thumbnails."
+      },
+      {
+        "url": "https://images.pexels.com/photos/8947771/pexels-photo-8947771.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "empty_state",
+        "description": "Minimalist folder setup for empty states or document upload placeholders."
+      }
+    ]
+  },
+  "interactions": {
+    "hover": "Subtle background color changes for interactive elements (e.g., hover:bg-zinc-50). Ensure text contrast remains high.",
+    "focus": "High contrast focus rings mandatory on all inputs and buttons: focus-visible:ring-2 focus-visible:ring-zinc-900 focus-visible:ring-offset-1.",
+    "transitions": "Fast and snappy transitions. transition-all duration-200 ease-in-out."
+  },
+  "accessibility": {
+    "contrast": "All text must pass WCAG AA. Zinc-500 is the lightest allowed text on white for small labels.",
+    "testing_attributes": "All interactive elements MUST include data-testid (e.g., data-testid='approve-manpower-btn')."
+  },
+  "instructions_to_main_agent": [
+    "Install standard Shadcn components: table, button, input, badge, select, dialog, tabs.",
+    "Override default 'Inter' font with 'IBM Plex Sans' for body and 'Cabinet Grotesk' for headings.",
+    "Implement the Layout with a Fixed Dark Sidebar (bg-zinc-900) and a Sticky White Header (bg-white).",
+    "For the Manpower Data Table, use a dense layout. Remove left/right borders on cells, use a subtle bottom border.",
+    "For IDs like Manpower ID, strictly wrap them in the 'id_number' formatting from the guidelines.",
+    "Use distinct status colors explicitly defined in the 'colors.status' and 'colors.documents' objects. Do not use generic colors.",
+    "Ensure the Medical Certificate renewal flow includes clear warnings (Expiring Soon) using the Orange-500 palette.",
+    "Never use placeholder URLs (like placehold.co). Use the provided image URLs in the media section.",
+    "Do not use card components heavily; use flat div containers with border-zinc-200 and shadow-sm for a clean, structural enterprise look.",
+    "Always apply data-testid attributes to CTAs, table rows, and form elements."
+  ]
+}

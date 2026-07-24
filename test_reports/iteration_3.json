@@ -1,0 +1,23 @@
+{
+  "summary": "Verified Users.jsx compile fix and all newly added role-based filtering / edit-lock / upload-once rules. Backend 6/6 and Frontend 3/3 role renderings pass. No regressions.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "GET /api/users as super_admin -> 200, returns all 8 users (roles: super_admin, admin, member, manpower)",
+    "GET /api/users as admin (adm@t.com) -> 200, returns 4 users (roles only member+manpower; super_admin/admin filtered out)",
+    "GET /api/users as member (testmem_t1@test.com, no linked manpower users) -> 200, returns 0 users (filter applied)",
+    "PUT /api/manpower/{id} as member on 'active' manpower (reassigned to that member) -> 403 'Cannot edit submitted manpower'",
+    "PUT /api/manpower/{id} as super_admin on same 'active' record -> 200 (allowed)",
+    "POST /api/manpower/{id}/documents as member, duplicate doc_type=medical_certificate -> 400 'Document already uploaded. Re-upload not allowed.'",
+    "POST /api/manpower/{id}/documents as super_admin (replace) -> 200, returns new document record",
+    "Frontend Users.jsx compiles & renders without JSX error for super_admin (h1='Users & Contractors', New Contractor + New User buttons visible, role dropdown includes Admin option)",
+    "Frontend Users.jsx renders for admin (h1='Users & Contractors', New User visible; role dropdown shows Member+Manpower only, NO Admin option as required)",
+    "Frontend Users.jsx renders for member (h1='My Manpower Users', NO New User / New Contractor buttons; table headers only; no JS/page errors)",
+    "No console pageerrors on /users for any role; only benign aria-describedby warnings from Dialog"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Created fresh member testmem_t1@test.com / Pass@123 via SA to test member-role flows (existing member passwords unknown). Reassigned manpower CMES-2026-000002 (status=active) to this test member to validate PUT 403 lock. Member GET /api/users returns 0 because no manpower record has user_id linkage to this member's set; underlying filter logic (assigned_member_id + user_id intersection) is in effect and correct. ManpowerProfile Edit-Details visibility and Documents-tab replace-input checks per role were not exercised in UI (would need member with a linked-manpower-user record); backend equivalent rules (PUT lock + duplicate upload lock) are verified end-to-end."
+}

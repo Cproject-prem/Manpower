@@ -1,0 +1,22 @@
+{
+  "summary": "Verified iteration_7 HIGH bug fix: ManpowerIn now accepts extension_rope_expiry_date and ppe_register_expiry_date. POST persists both, GET returns them, PUT updates them, and the Renewals page shows the Extension Rope and PPE Register badges for manpower expiring within 30 days.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "POST /api/auth/login (superadmin) -> 200",
+    "POST /api/manpower with extension_rope_expiry_date=+15d and ppe_register_expiry_date=+20d -> 200, both fields present in response (no longer dropped)",
+    "GET /api/manpower/{id} -> 200, both date fields returned with correct values",
+    "PUT /api/manpower/{id} updating extension_rope_expiry_date=+10d and ppe_register_expiry_date=+25d -> 200, response reflects updated values",
+    "Frontend Renewals page (/renewals) renders test manpower row with badges 'Extension Rope · 9d left' and 'PPE Register · 24d left'"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "evidence": {
+    "manpower_id_created": "4c950432-fe62-469c-afdc-2a615a8ab902",
+    "post_response_fields": {"extension_rope_expiry_date": "2026-07-11", "ppe_register_expiry_date": "2026-07-16"},
+    "put_response_fields": {"extension_rope_expiry_date": "2026-07-06", "ppe_register_expiry_date": "2026-07-21"},
+    "renewals_ui_screenshot": "/app/test_reports/renewals_view.png"
+  }
+}

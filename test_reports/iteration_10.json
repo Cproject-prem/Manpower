@@ -1,0 +1,61 @@
+{
+  "summary": "End-to-end testing of iteration 10 features: (1) FTP storage adapter graceful no-op, (2) Contractor & Manpower Disable/Enable + RBAC, (3) Dynamic Contractor form-config with extra_fields. All 19 new backend tests pass + all 20 prior tests continue to pass (39/39 total). Frontend: 5-tab Settings page, dynamic Contractor New dialog, Show disabled toggles on /contractors and /manpower, disabled badge + per-row Disable button on Contractors list, ManpowerProfile toggle-disabled-btn, and FTP Test/Reconcile buttons in System tab all verified visually & functionally.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Contractor New dialog", "issues": ["Console warning: Missing `Description` or `aria-describedby` for DialogContent (a11y warning from shadcn Dialog). Non-blocking."]}
+    ]
+  },
+  "passed": [
+    "Backend: GET /api/form-configs/contractor returns seeded config with 5 system fields (name/contact_person/phone/email/address)",
+    "Backend: PUT /api/form-configs/contractor with new non-system field 'pan_*' persists across reload",
+    "Backend: PUT /api/form-configs/contractor removing system 'name' returns 400 'Cannot remove system fields'",
+    "Backend: POST /api/contractors with extra_fields {pan, year_established} stores & returns intact via GET",
+    "Backend: POST /api/contractors/{id}/disable sets disabled; default GET hides it; ?include_disabled=true reveals; /enable restores visibility",
+    "Backend: POST /api/manpower/{id}/disable hides from default GET /api/manpower; /stats endpoint still returns; ?include_disabled=true reveals; /enable restores",
+    "Backend RBAC: vendor_admin POST /api/contractors/{cid}/disable -> 403",
+    "Backend RBAC: member POST /api/contractors/{cid}/disable -> 403",
+    "Backend RBAC: super_admin POST /api/contractors/{cid}/disable -> 200",
+    "Backend RBAC: vendor_admin POST /api/settings/ftp/test -> 403",
+    "Backend: POST /api/settings/ftp/test (no ftp_host) -> {ok:false, error:'FTP host not configured'} (no exception)",
+    "Backend: POST /api/settings/ftp/reconcile -> {ok:true, message:'Reconcile started in background'} (no-op when not configured)",
+    "Backend regression: all 20 tests in test_deferred_features.py still pass",
+    "Frontend: Settings page has 5 tabs in order Manpower/Contractor/Compliance/System/Audit (all data-testids present)",
+    "Frontend: Contractor Form tab loads FormBuilder for 'contractor' key",
+    "Frontend: Settings > System tab shows 'Test FTP Connection' and 'Reconcile to FTP' buttons (super_admin)",
+    "Frontend: Clicking Test FTP with empty host triggers error toast containing 'FTP host not configured'",
+    "Frontend: /contractors page shows 'Show disabled' checkbox; toggling reveals disabled rows with 'disabled' badge",
+    "Frontend: /contractors per-row Disable/Enable button (data-testid='toggle-disabled-{id}') present",
+    "Frontend: New Contractor dialog renders 5 fields dynamically from form-config (Name/Contact Person/Phone/Email/Address); save succeeds (toast 'Contractor added')",
+    "Frontend: /manpower list shows 'Show disabled' toggle",
+    "Frontend: /manpower/{id} ManpowerProfile shows toggle-disabled-btn in header (admin/super_admin)"
+  ],
+  "failed": [],
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_new_features.py",
+    "/app/backend/tests/test_deferred_features.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [
+    "(low) Add aria-describedby/Description to the Contractor New dialog (shadcn DialogContent) to silence the a11y console warning.",
+    "(observation) Reconcile endpoint always returns ok:true regardless of FTP config — consider returning ok:false with message when not configured, since current behaviour is opaque to UI."
+  ],
+  "critical_code_review_comments": [
+    "settings.py POST /ftp/reconcile spawns asyncio.create_task and returns immediately; if reconcile_on_startup raises, error is swallowed. Acceptable for best-effort, but log task exceptions via task.add_done_callback to aid debugging.",
+    "contractors.py list_contractors mixes vendor_admin filter and include_disabled — vendor_admin can never see ?include_disabled=true (intentional?). Current code only applies disabled filter for non-vendor_admin; document this behaviour.",
+    "storage.py _upload_sync: 'except (socket.error, ftplib.all_errors)' — ftplib.all_errors is a tuple, fine here but socket.error is alias of OSError; keep as is. No issue.",
+    "Same scoped-fixture-as-instance-method PytestRemovedIn10Warning emitted (3 occurrences); migrate to @classmethod fixtures or top-level fixtures before pytest 10."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_new_features.py (new)"
+  ],
+  "success_rate": { "backend": "100% (19/19 new, 39/39 cumulative)", "frontend": "100% critical flows" },
+  "test_credentials": "Super Admin: superadmin@portal.com / Admin@123. Reusable VA from prior iter: va_known_a86f3@example.com / Pass@1234.",
+  "seed_data_creation": "Created several TEST_* contractors (incl. TEST_UI_C from UI flow), TEST_CMP_* manpower, TEST_mem_* member, TEST_va_* vendor admins; safe to leave or cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iteration-10 features fully working. Two test suites live: /app/backend/tests/test_deferred_features.py (20 tests, prior features) and /app/backend/tests/test_iter10_new_features.py (19 tests, this iteration). Pytest XML at /app/test_reports/pytest/iter10_results.xml. FTP cannot be live-tested without a real FTP server; only no-op paths were validated."
+}

@@ -1,0 +1,20 @@
+{
+  "summary": "Verified the HIGH bug fix from iteration_4: Users.jsx saveEditUser now omits role from PUT body when the target is super_admin. As super_admin via UI, editing the seeded super_admin (name + phone) returned 200 with toast 'User updated', dialog closed, and table reflected the new name. Editing a non-super_admin (member) user also succeeded with 200. Backend curl confirms PUT /api/users/{sa_id} without role => 200 while PUT with role='super_admin' still 422 (backend unchanged). Regression checks on previously-passing flows are still green.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "UI: SA opens Edit dialog for super_admin target, role select rendered with Super Admin item, change name/phone, Save -> PUT /api/users/{sa_id} returns 200, toast 'User updated' shown, dialog closes, table shows 'Super Admin Final'",
+    "UI: SA edits member (non super_admin) target -> PUT 200, table updates to 'Member One Renamed'",
+    "API: PUT /api/users/{sa_id} body without role (as SA) -> 200; body with role='super_admin' -> still 422 (backend Literal unchanged, confirming the frontend fix is required and correct)",
+    "API: PUT /api/users/{member_id} as SA with role='member' -> 200 (role changes for non super_admin still persist)",
+    "Regression: PUT /api/users/{admin_id} as admin -> 403 'Admins can only edit Member or Manpower users'",
+    "Regression: PUT /api/users/{manpower_id} as admin -> 200",
+    "Regression: POST /api/users/{linked_mp_id}/reset-password as member1 -> 200 {ok:true}",
+    "Auth: super_admin and admin (adm@t.com) cookie logins work; member1 login works after SA reset"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100% (7/7 endpoint cases)", "frontend": "100% on targeted Users edit flows (SA target + member target)"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Renewals page heading and New Registration form date fields were not re-exercised in this iteration because only /app/frontend/src/pages/Users.jsx was modified since iteration_4 (backend unchanged); those flows were green in iteration_4 and are not affected by the current change. Member1 password had been altered during earlier tests; SA-reset it back to Admin@123 to perform the reset-password regression."
+}

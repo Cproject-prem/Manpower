@@ -1,0 +1,56 @@
+{
+  "summary": "End-to-end testing of 3 deferred features: (1) Dynamic Form Builder, (2) Contractor View + ESI/PF/MSME/GST compliance docs, (3) vendor_admin role. All 20 backend pytest cases pass; frontend e2e (Super Admin + Vendor Admin flows) verified visually and via console.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": { "ui_bugs": [], "integration_issues": [], "design_issues": [] },
+  "passed": [
+    "Auth: superadmin login + /api/auth/me returns role super_admin",
+    "Form Builder: GET /api/form-configs/manpower returns seeded config with system fields locked",
+    "Form Builder: GET /api/form-configs/compliance returns 4 sections (ESI/PF/MSME/GST)",
+    "Form Builder: PUT manpower form with new custom field 'test_aadhar_number' persists across reload",
+    "Form Builder: removing a system field ('full_name') via PUT is rejected with 400",
+    "Form Builder: vendor_admin PUT /api/form-configs/manpower -> 403 (RBAC enforced)",
+    "Form Builder: admin user PUT /api/form-configs/manpower -> 200",
+    "Manpower: POST /api/manpower with extra_fields persists; GET returns extra_fields correctly",
+    "Vendor Admin: GET /api/contractors returns ONLY assigned contractor (other contractor excluded)",
+    "Vendor Admin: GET /api/users returns only member/manpower for own contractor",
+    "Vendor Admin: POST /api/users role=member -> 200, contractor_id forced to VA scope",
+    "Vendor Admin: POST /api/users role=admin -> 403",
+    "Vendor Admin: POST /api/users role=vendor_admin -> 403",
+    "Vendor Admin: GET /api/contractors/{otherId} -> 403",
+    "Compliance docs: VA POST /api/contractors/{ownId}/compliance-documents (esi PDF) -> 200",
+    "Compliance docs: all 4 doc_types (esi/pf/msme/gst) upload successfully and appear in GET contractor",
+    "Compliance docs: invalid doc_type rejected with 400",
+    "Compliance metadata: PUT /api/contractors/{id}/compliance saves esi_number / gst_number; persists on reload",
+    "Compliance docs: VA cannot upload to non-owned contractor (403)",
+    "UI Settings page: Form Builder tab default, system fields show lock+'system' badge with NO delete button; custom 'test_aadhar_number' shows delete icon",
+    "UI Settings page: Compliance Form tab shows ESI/PF/MSME/GST sections; 'Add Section' hidden",
+    "UI Contractors page (SA): lists all contractors with status badges; one row shows all 4 badges green after uploads",
+    "UI Vendor Admin login: sidebar lists Dashboard/Manpower/New Registration/Renewals/Documents/Contractors/Workforce Deployment/Users -- Settings hidden",
+    "UI VA: visiting /settings redirects to /dashboard",
+    "UI VA: /contractors lists ONLY 1 row (own contractor); 'New Contractor' button hidden",
+    "UI VA: Contractor detail page shows 4 compliance sections (ESI/PF/MSME/GST) with file inputs and Save Metadata button",
+    "UI VA: visiting other contractor URL gracefully redirects back to /contractors after backend 403"
+  ],
+  "failed": [],
+  "test_report_links": [
+    "/app/backend/tests/test_deferred_features.py",
+    "/app/test_reports/pytest/iter9_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 1278 lines - approaching the 700-line guideline. Consider splitting into modules (auth.py, users.py, manpower.py, contractors.py, form_configs.py) for maintainability.",
+    "In _sync_company_name (line 719) there is a dead expression: 'await _sync_company_name({...}) if False else None'. Should be removed.",
+    "filter_for_user returns {'_id': '__none__'} which works because no document has that string _id, but it is fragile. Prefer something like {'id': '__none__'} or a guaranteed-impossible match.",
+    "TestVendorAdminScoping permits VA to set any contractor_id when creating member -- the server correctly forces it back to VA's contractor_id (good). Frontend should likewise pre-fill & lock that field for VA (verified via API; UI not retested in this run)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deferred_features.py (new)"
+  ],
+  "success_rate": { "backend": "100% (20/20)", "frontend": "100% (critical flows)" },
+  "test_credentials": "Super Admin superadmin@portal.com / Admin@123. Test VA created during run: va_known_a86f3@example.com / Pass@1234 (kept for next iteration).",
+  "seed_data_creation": "Created several TEST_Contractor_* contractors, TEST VA/Member/Admin users with TEST_ prefix on email; safe to ignore or cleanup later.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 3 deferred features fully working. backend test suite at /app/backend/tests/test_deferred_features.py covers form-builder, vendor_admin RBAC, compliance docs + metadata, and extra_fields persistence. Reusable VA login: va_known_a86f3@example.com / Pass@1234. Screenshots in /app/test_reports/settings_page.png, contractors_page.png, users_page.png, va_contractors.png, va_contractor_detail.png. server.py is becoming large -- next agent could request modularization."
+}

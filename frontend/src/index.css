@@ -1,0 +1,86 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,600,700,800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #fafafa;
+    color: #18181b;
+}
+
+@media print {
+    [data-testid="sidebar"], header { display: none !important; }
+    main { margin-left: 0 !important; padding-top: 0 !important; }
+    button { display: none !important; }
+    .id-pill { border: 1px solid #999 !important; }
+    a[data-testid^="doc-link-"] { display: block !important; }
+    /* Hide screen-only content, show print-only content */
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    /* Force page break behavior to keep document cards together */
+    .print-doc-card { break-inside: avoid; page-break-inside: avoid; }
+    .print-img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
+    /* Ensure images print with full color */
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}
+.print-only { display: none; }
+
+h1, h2, h3, h4, h5 {
+    font-family: "Cabinet Grotesk", "IBM Plex Sans", sans-serif;
+    letter-spacing: -0.02em;
+}
+
+code, .mono {
+    font-family: "JetBrains Mono", monospace;
+}
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 240 6% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 6% 10%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 240 6% 10%;
+        --primary: 240 6% 10%;
+        --primary-foreground: 0 0% 98%;
+        --secondary: 240 5% 96%;
+        --secondary-foreground: 240 6% 10%;
+        --muted: 240 5% 96%;
+        --muted-foreground: 240 4% 46%;
+        --accent: 240 5% 96%;
+        --accent-foreground: 240 6% 10%;
+        --destructive: 0 84% 60%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 240 6% 90%;
+        --input: 240 6% 90%;
+        --ring: 240 6% 10%;
+        --radius: 0.5rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+/* Mono ID pill */
+.id-pill {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8125rem;
+    background: #f4f4f5;
+    border: 1px solid #e4e4e7;
+    border-radius: 6px;
+    padding: 2px 6px;
+    color: #18181b;
+}

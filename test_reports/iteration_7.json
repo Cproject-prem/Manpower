@@ -1,0 +1,37 @@
+{
+  "summary": "Verified iteration 7 additions for Extension Rope, PPE Register, Edit-dialog contractor selector, and Print/Save PDF. Most frontend additions work, RenewalSubmitIn accepts new doc_types, but ManpowerIn model is MISSING extension_rope_expiry_date and ppe_register_expiry_date fields — POST and PUT /api/manpower silently drop them, blocking the end-to-end feature and the Renewals badge flow.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "Login as super_admin works (POST /api/auth/login 200, cookie+token set).",
+    "POST /api/manpower 200 (existing fields persist).",
+    "PUT /api/manpower/{id} 200 (existing fields persist).",
+    "RenewalSubmitIn accepts doc_type='extension_rope_certificate' and 'ppe_register' (no 422, returns 400 'Upload new ... first' which proves Literal validation passes).",
+    "Frontend ManpowerProfile Documents tab renders 'Extension Rope Certificate' and 'PPE Register' labels (DOC_TYPES grid).",
+    "Submit Renewal dialog dropdown lists: Medical Fitness, Height Work, Safety Belt, Extension Rope Certificate, PPE Register.",
+    "Edit dialog [data-testid=edit-contractor_id] present as native SELECT with 5 options; selecting 'Acme Corp' auto-fills the Company Name (auto from Contractor) input; saving persists — profile then displays Company Name = Acme Corp.",
+    "[data-testid=print-pdf-btn] 'Print / Save PDF' button visible on Manpower Profile.",
+    "Regression: company_name still auto-syncs from contractor on backend PUT (post-edit profile shows updated contractor name)."
+  ],
+  "failed": [
+    {
+      "area": "backend ManpowerIn schema",
+      "issue": "POST and PUT /api/manpower do NOT persist extension_rope_expiry_date or ppe_register_expiry_date. The ManpowerIn pydantic model (backend/server.py lines 144-165) does not declare these two fields, so Pydantic silently drops them. Server response confirms both remain null after POST and PUT with the values set.",
+      "evidence": "curl POST /api/manpower body {full_name, extension_rope_expiry_date:'2026-12-15', ppe_register_expiry_date:'2027-01-20'} → 200; response fields extension_rope_expiry_date and ppe_register_expiry_date are absent. PUT with the same fields → both still None on GET.",
+      "priority": "HIGH"
+    },
+    {
+      "area": "frontend Renewals page badges",
+      "issue": "Could not positively verify the 'Extension Rope · Nd left' / 'PPE Register · Nd left' badges because no manpower record can have those expiry fields set (caused by HIGH bug above). Renewals page currently renders 'No renewals needed.' for active records that should have an Extension Rope expiry within 30 days.",
+      "evidence": "Renewals page text contains neither 'Extension Rope' nor 'PPE Register'. Underlying data missing because ManpowerIn drops the fields.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Add fields to ManpowerIn in backend/server.py (after safety_belt_expiry_date around line 149): `extension_rope_expiry_date: Optional[str] = None` and `ppe_register_expiry_date: Optional[str] = None`. This will let POST /api/manpower and PUT /api/manpower/{id} persist them via the existing `**payload.model_dump()` and `upd` logic.",
+    "After the schema fix, re-test: create/edit a manpower with extension_rope_expiry_date within 30 days, then confirm Renewals page shows 'Extension Rope · Nd left' badge; same for PPE Register.",
+    "Optionally run a full end-to-end renewal flow (upload doc → submit renewal → approve) for ppe_register and extension_rope_certificate to confirm field updates apply (code path at server.py lines 760-763 looks correct; could not exercise live because submit requires prior 'new' doc upload)."
+  ],
+  "success_rate": {"backend": "60%", "frontend": "90%"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}

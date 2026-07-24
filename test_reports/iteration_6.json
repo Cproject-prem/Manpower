@@ -1,0 +1,21 @@
+{
+  "summary": "Verified both changes from iteration_5/6: (a) super_admin user edit no longer returns 422 — frontend omits 'role' field from PUT body when target is super_admin and role <Select> is disabled; (b) backend force-syncs company_name=contractor.name on create_manpower and update_manpower; NewRegistration and ManpowerProfile EditField render Company Name as disabled/readOnly.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "Backend: POST /api/auth/login superadmin@portal.com -> 200",
+    "Backend BUG FIX: PUT /api/users/{super_admin_id} with body {name,phone} (no role) -> 200, returns role=super_admin unchanged",
+    "Backend regression: PUT /api/users/{member_id} role=manpower -> 200 (role updated); revert to member -> 200",
+    "Backend NEW RULE: POST /api/manpower with contractor_id=Synced_Co + company_name='WRONG VALUE' -> created with company_name='Synced Co' (server overrode)",
+    "Backend NEW RULE: PUT /api/manpower/{id} with contractor still Synced Co + company_name='Anything Else' -> response company_name='Synced Co' (server overrode)",
+    "Backend NEW RULE: PUT /api/manpower/{id} switching contractor_id to Other Co (no company_name sent) -> response company_name='Other Co' (auto-synced)",
+    "Frontend Users page: edit-{super_admin_id} dialog opens; edit-user-role Select is_disabled()=True; saveEditUser PUT body = {\"name\":\"...\",\"phone\":\"...\",\"contractor_id\":null} — confirmed 'role' key is OMITTED; toast/dialog closes; row name updates to 'Super Admin Boss UI' and role badge still 'super_admin'",
+    "Frontend NewRegistration (/manpower/new): label 'Company Name (auto from Contractor)' present; field-company_name is_disabled()=True; selecting contractor 'Synced Co' in field-contractor_id updates company_name input value to 'Synced Co'",
+    "Frontend ManpowerProfile Edit dialog: edit-company_name present, readOnly=true, prefilled with current contractor name ('Other Co' after API-driven switch)"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "PUT /api/manpower/{id} requires full_name in body (Pydantic model). Not a regression — pre-existing contract. Frontend NewRegistration route is /manpower/new (not /register-new)."
+}
