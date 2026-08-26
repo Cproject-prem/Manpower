@@ -8,10 +8,18 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
   return {
-    plugins: [react({
-      // Allow JSX inside `.js` files (existing codebase uses .js for components)
-      include: /\.(jsx?|tsx?)$/,
-    })],
+    plugins: [
+      react({
+        // Allow JSX inside `.js` files (existing codebase uses .js for components)
+        include: /\.(jsx?|tsx?)$/,
+      }),
+      {
+        name: "html-env-transform",
+        transformIndexHtml(html) {
+          return html.replace(/%REACT_APP_BACKEND_URL%/g, env.REACT_APP_BACKEND_URL || "");
+        },
+      },
+    ],
     esbuild: {
       loader: "jsx",
       include: /src\/.*\.(jsx?|tsx?)$/,
@@ -37,8 +45,19 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       port: 3001,
       strictPort: true,
-      // Allow preview/sandbox hostnames (e.g. *.preview.emergentagent.com)
       allowedHosts: true,
+      proxy: {
+        "/api": {
+          target: "http://localhost:8002",
+          changeOrigin: true,
+          secure: false,
+        },
+        "/uploads": {
+          target: "http://localhost:8002",
+          changeOrigin: true,
+          secure: false,
+        },
+      },
       // When running behind an HTTPS reverse proxy (preview environment),
       // set VITE_HMR_HOST + VITE_HMR_PORT in .env to route HMR over wss.
       // For plain `localhost` development we leave HMR on defaults.

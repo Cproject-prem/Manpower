@@ -1,7 +1,19 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
+export function getBaseApiUrl() {
+  const envUrl = (
+    (typeof window !== "undefined" && window.__API_BASE__ && !window.__API_BASE__.startsWith("%"))
+      ? window.__API_BASE__
+      : (process.env.REACT_APP_BACKEND_URL || "")
+  ).trim();
+
+  if (envUrl) {
+    return `${envUrl.replace(/\/$/, "")}/api`;
+  }
+  return "/api";
+}
+
+export const API = getBaseApiUrl();
 
 const TOKEN_KEY = "cmes_token";
 
@@ -39,6 +51,7 @@ export const api = axios.create({
 
 // Attach Bearer token for cross-origin (localhost dev) or general robustness
 api.interceptors.request.use((cfg) => {
+  cfg.baseURL = getBaseApiUrl();
   const t = getToken();
   if (t) {
     cfg.headers = cfg.headers || {};
