@@ -51,6 +51,7 @@ DEFAULT_MANPOWER_FORM = {
         {"title": "Work", "fields": [
             {"key": "reporting_cluster_manager", "label": "Reporting Cluster Manager", "type": "text", "system": True},
             {"key": "work_state", "label": "Work State", "type": "text", "system": True},
+            {"key": "designation", "label": "Designation", "type": "text", "system": True},
             {"key": "subvendor", "label": "Subvendor", "type": "text", "system": True},
             {"key": "reference", "label": "Reference", "type": "text", "system": True},
             {"key": "contractor_id", "label": "Contractor", "type": "contractor", "system": True},

@@ -4,11 +4,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+import os
 
 from app.config import ALLOWED_EXT, COMPLIANCE_DOC_KEYS, MAX_FILE_SIZE, UPLOAD_DIR
 from app.db import db
 from app.deps import get_current_user, require_roles
-from app.helpers import audit, contractor_access
+from app.helpers import audit, check_region_scope, contractor_access
 from app.schemas import ContractorComplianceUpdate, ContractorIn
 from app.utils import new_id, now_iso, slugify
 
@@ -21,6 +22,10 @@ async def list_contractors(user=Depends(get_current_user), include_disabled: boo
     if user["role"] == "vendor_admin":
         cid = user.get("contractor_id")
         f = {"id": cid} if cid else {"_id": "__none__"}
+    elif user["role"] == "admin":
+        scope = user.get("region_scope") or []
+        if scope:
+            f["region"] = {"$in": scope}
     if not include_disabled:
         # Default hides disabled (still visible to admins via flag, vendor_admin always sees own even if disabled)
         if user["role"] != "vendor_admin":
@@ -277,7 +282,7 @@ async def upload_contractor_compliance_doc(
 
 
 @router.get("/{cid}/compliance-documents/{doc_id}")
-async def download_contractor_compliance_doc(cid: str, doc_id: str, current=Depends(get_current_user)):
+async def download_contractor_document(cid: str, doc_id: str, download: bool = False, current=Depends(get_current_user)):
     if not contractor_access(current, cid):
         raise HTTPException(status_code=403, detail="Forbidden")
     c = await db.contractors.find_one({"id": cid})
@@ -287,7 +292,166 @@ async def download_contractor_compliance_doc(cid: str, doc_id: str, current=Depe
     doc = next((d for d in all_docs if d["id"] == doc_id), None)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+        
+    from app.config import UPLOAD_DIR
     full = UPLOAD_DIR / doc["file_path"]
     if not full.exists():
         raise HTTPException(status_code=404, detail="File missing on disk")
-    return FileResponse(str(full), filename=doc["file_name"])
+        
+    disp = "attachment" if download else "inline"
+    return FileResponse(str(full), filename=doc["file_name"], content_disposition_type=disp)
+
+
+@router.delete("/{cid}/compliance-documents/{doc_id}")
+async def delete_contractor_document(cid: str, doc_id: str, current=Depends(get_current_user)):
+    c = await db.contractors.find_one({"id": cid})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contractor not found")
+        
+    can_manage = current["role"] in ("super_admin", "admin") or (current["role"] == "vendor_admin" and current.get("contractor_id") == cid)
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="Not authorized to manage this contractor")
+        
+    doc = next((d for d in c.get("compliance_documents", []) if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    # Delete file from disk
+    from app.config import UPLOAD_DIR
+    full_path = UPLOAD_DIR / doc["file_path"]
+    if full_path.exists():
+        try:
+            os.remove(full_path)
+        except Exception:
+            pass
+            
+    # Remove from DB
+    await db.contractors.update_one(
+        {"id": cid}, 
+        {"$pull": {"compliance_documents": {"id": doc_id}}, "$set": {"updated_at": now_iso()}}
+    )
+    await audit(current, "contractor.document.delete", cid, {"doc_type": doc["doc_type"], "file": doc["file_name"]})
+    return {"status": "ok"}
+
+
+async def _maybe_generate_vendor_id(cid: str, c: dict) -> str | None:
+    """Check if all uploaded compliance docs are approved; if so generate vendor_id."""
+    if c.get("vendor_id"):
+        return c["vendor_id"]
+
+    docs = c.get("compliance_documents") or []
+    if not docs:
+        return None
+
+    # All uploaded docs must be approved
+    if not all(d.get("status") == "approved" for d in docs):
+        return None
+
+    # Generate vendor ID
+    vendor_id_format = (c.get("vendor_id_format") or "").strip()
+    if vendor_id_format:
+        vendor_id = vendor_id_format
+    else:
+        prefix = (c.get("name") or "VND")[:3].upper()
+        year = datetime.now(timezone.utc).year
+        vendor_id = f"{prefix}{year}"
+
+    # Ensure uniqueness by appending a counter if needed
+    base_id = vendor_id
+    counter = await db.counters.find_one_and_update(
+        {"key": f"vendor_id_{base_id}"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    seq = counter["seq"] if counter else 1
+    # Seq=1 means first vendor with this prefix — no suffix needed unless collision exists
+    if seq > 1 or await db.contractors.count_documents({"vendor_id": base_id, "id": {"$ne": cid}}) > 0:
+        vendor_id = f"{base_id}-{seq:03d}"
+
+    await db.contractors.update_one(
+        {"id": cid},
+        {"$set": {"vendor_id": vendor_id, "vendor_id_generated_at": now_iso(), "updated_at": now_iso()}},
+    )
+    
+    # Propagate to all manpower belonging to this contractor
+    await db.manpower.update_many(
+        {"contractor_id": cid},
+        {"$set": {"vendor_id": vendor_id}}
+    )
+    
+    return vendor_id
+
+
+@router.post("/{cid}/compliance-documents/{doc_id}/approve")
+async def approve_contractor_document(cid: str, doc_id: str, current=Depends(require_roles("super_admin", "admin"))):
+    c = await db.contractors.find_one({"id": cid})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contractor not found")
+    if c.get("region"):
+        check_region_scope(current, c.get("region"))
+
+    docs = c.get("compliance_documents") or []
+    doc = next((d for d in docs if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
+    # Update status on the specific document
+    updated_docs = [
+        {**d, "status": "approved", "approved_by": actor_name, "approved_by_email": current["email"], "approved_at": now_iso()}
+        if d["id"] == doc_id else d
+        for d in docs
+    ]
+    await db.contractors.update_one(
+        {"id": cid},
+        {"$set": {"compliance_documents": updated_docs, "updated_at": now_iso()}},
+    )
+    await audit(current, "contractor.document.approve", cid, {"doc_type": doc["doc_type"], "approved_by": actor_name})
+
+    # Re-fetch and try to generate vendor_id
+    refreshed = await db.contractors.find_one({"id": cid})
+    vendor_id = await _maybe_generate_vendor_id(cid, refreshed)
+
+    # Email vendor admin if vendor_id was just generated
+    if vendor_id and not c.get("vendor_id"):
+        vendor_admin = await db.users.find_one({"contractor_id": cid, "role": "vendor_admin"})
+        if vendor_admin:
+            from app.notifications import notify
+            await notify(
+                [vendor_admin["id"]],
+                "Vendor ID Generated",
+                f"Your Vendor ID is: {vendor_id}. All compliance documents have been approved.",
+                f"/contractors/{cid}",
+            )
+
+    result = await db.contractors.find_one({"id": cid}, {"_id": 0})
+    return {**result, "vendor_id_generated": vendor_id is not None and not c.get("vendor_id")}
+
+
+@router.post("/{cid}/compliance-documents/{doc_id}/reject")
+async def reject_contractor_document(cid: str, doc_id: str, current=Depends(require_roles("super_admin", "admin")), payload: dict | None = None):
+    c = await db.contractors.find_one({"id": cid})
+    if not c:
+        raise HTTPException(status_code=404, detail="Contractor not found")
+    if c.get("region"):
+        check_region_scope(current, c.get("region"))
+
+    docs = c.get("compliance_documents") or []
+    doc = next((d for d in docs if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
+    reason = (payload or {}).get("reason", "")
+    updated_docs = [
+        {**d, "status": "rejected", "rejected_by": actor_name, "rejected_by_email": current["email"], "rejected_at": now_iso(), "reject_reason": reason}
+        if d["id"] == doc_id else d
+        for d in docs
+    ]
+    await db.contractors.update_one(
+        {"id": cid},
+        {"$set": {"compliance_documents": updated_docs, "updated_at": now_iso()}},
+    )
+    await audit(current, "contractor.document.reject", cid, {"doc_type": doc["doc_type"], "reason": reason, "rejected_by": actor_name})
+    return await db.contractors.find_one({"id": cid}, {"_id": 0})

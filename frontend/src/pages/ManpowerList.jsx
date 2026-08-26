@@ -204,6 +204,7 @@ export default function ManpowerList() {
               <th className="text-left py-2 px-4 font-medium">Contractor</th>
               <th className="text-left py-2 px-4 font-medium">Region</th>
               <th className="text-left py-2 px-4 font-medium">Location</th>
+              <th className="text-left py-2 px-4 font-medium">Designation</th>
               <th className="text-left py-2 px-4 font-medium">MC Expiry</th>
               <th className="text-left py-2 px-4 font-medium">Docs</th>
               <th className="text-left py-2 px-4 font-medium">Status</th>
@@ -227,9 +228,15 @@ export default function ManpowerList() {
                   {m.full_name}
                   {m.disabled && <span className="ml-2 inline-block text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700">disabled</span>}
                 </td>
-                <td className="py-3 px-4 text-zinc-600">{contractorName(m.contractor_id)}</td>
+                <td className="py-3 px-4 text-zinc-600">
+                  <span>{contractorName(m.contractor_id)}</span>
+                  {(() => { const c = contractors.find((c) => c.id === m.contractor_id); return c?.vendor_id ? (
+                    <span className="ml-1.5 font-mono text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">{c.vendor_id}</span>
+                  ) : null; })()}
+                </td>
                 <td className="py-3 px-4 text-zinc-600">{m.region || "—"}</td>
                 <td className="py-3 px-4 text-zinc-600">{m.location || "—"}</td>
+                <td className="py-3 px-4 text-zinc-600">{m.designation || "—"}</td>
                 <td className="py-3 px-4 text-zinc-600">{m.medical_expiry_date || "—"}</td>
                 <td className="py-3 px-4"><StatusBadge status={m.document_status} /></td>
                 <td className="py-3 px-4"><StatusBadge status={m.display_status} /></td>

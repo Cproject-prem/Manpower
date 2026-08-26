@@ -24,6 +24,7 @@ export default function DynamicFormFields({ section, values, onChange, context =
             key={f.key}
             field={f}
             value={values[f.key] ?? ""}
+            values={values}
             onChange={onChange}
             context={context}
             disabled={disabledKeys?.has(f.key)}
@@ -34,7 +35,7 @@ export default function DynamicFormFields({ section, values, onChange, context =
   );
 }
 
-function FieldRenderer({ field, value, onChange, context, disabled }) {
+function FieldRenderer({ field, value, values = {}, onChange, context, disabled }) {
   const { contractors = [], members = [], isAdmin = false } = context;
   // Hide admin-only fields for non-admins
   if (field.admin_only && !isAdmin) return null;
@@ -84,15 +85,22 @@ function FieldRenderer({ field, value, onChange, context, disabled }) {
       </Select>
     );
   } else if (field.type === "member") {
+    const selectedContractorId = values?.contractor_id;
+    const filteredMembers = selectedContractorId
+      ? members.filter((m) => m.contractor_id === selectedContractorId)
+      : members;
+
     control = (
       <Select
         value={value || ""}
         onValueChange={(v) => onChange(field.key, v)}
         disabled={isDisabled}
       >
-        <SelectTrigger data-testid={testId}><SelectValue placeholder="Assign to member" /></SelectTrigger>
+        <SelectTrigger data-testid={testId}>
+          <SelectValue placeholder={!selectedContractorId ? "Select contractor first" : filteredMembers.length === 0 ? "No members for this contractor" : "Assign to member"} />
+        </SelectTrigger>
         <SelectContent>
-          {members.map((m) => (
+          {filteredMembers.map((m) => (
             <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
           ))}
         </SelectContent>

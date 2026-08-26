@@ -7,6 +7,9 @@ from app.db import db
 from app.utils import now_iso, new_id
 
 
+from fastapi import HTTPException
+
+
 def fire_email(event: str, *, manpower: Optional[dict] = None, actor: Optional[dict] = None, extra_ctx: Optional[dict] = None):
     """Schedule an email send as a background task (never blocks caller)."""
     try:
@@ -18,16 +21,37 @@ def fire_email(event: str, *, manpower: Optional[dict] = None, actor: Optional[d
 
 
 async def audit(user: dict, action: str, target: str = "", details: Optional[dict] = None):
+    actor_name = user.get("name") or user.get("full_name") or user.get("email")
     await db.audit_logs.insert_one({
         "id": new_id(),
         "user_id": user.get("id"),
         "user_email": user.get("email"),
+        "user_name": actor_name,
         "user_role": user.get("role"),
         "action": action,
         "target": target,
         "details": details or {},
         "at": now_iso(),
     })
+
+
+def check_region_scope(user: dict, target_region: Optional[str]):
+    """Enforce region scope permission for admins during approval / management actions.
+    - super_admin: allowed everywhere.
+    - admin: if `region_scope` is set (non-empty list), `target_region` MUST be in `region_scope`.
+    """
+    if user.get("role") == "super_admin":
+        return
+    if user.get("role") == "admin":
+        scope = user.get("region_scope") or []
+        if scope:
+            if not target_region or target_region not in scope:
+                scope_str = ", ".join(scope)
+                reg_str = f"'{target_region}'" if target_region else "unassigned region"
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied: Record in region {reg_str} is outside your assigned region scope ({scope_str})."
+                )
 
 
 async def notify(user_ids: List[str], title: str, body: str, link: str = ""):
@@ -44,41 +68,55 @@ async def notify(user_ids: List[str], title: str, body: str, link: str = ""):
         await db.notifications.insert_many(docs)
 
 
+EXPIRY_KEYS = [
+    "medical_expiry_date",
+    "height_work_expiry_date",
+    "safety_belt_expiry_date",
+    "extension_rope_expiry_date",
+    "ppe_register_expiry_date",
+]
+
+
 def compute_dynamic_status(m: dict) -> str:
-    """Compute display status considering medical expiry for approved manpower."""
-    base = m.get("status", "draft")
-    if base != "active":
-        return base
-    expiry = m.get("medical_expiry_date")
-    if not expiry:
-        return base
-    try:
-        exp_date = datetime.fromisoformat(expiry).date() if "T" in expiry else date.fromisoformat(expiry)
-    except Exception:
-        return base
-    today = datetime.now(timezone.utc).date()
-    if m.get("renewal_pending"):
-        return "renewal_pending"
-    if exp_date < today:
-        return "expired"
-    if (exp_date - today).days <= 30:
-        return "expiring_soon"
-    return "active"
+    """Compute the primary display status — only disabled vs workflow state.
+    
+    Priority:
+      1. disabled flag → "disabled" (overrides everything)
+      2. return the raw status field as-is (draft / pending_approval / active / rejected)
+    """
+    if m.get("disabled"):
+        return "disabled"
+    return m.get("status", "draft")
 
 
 def doc_status(m: dict) -> str:
+    """Compute the document completeness/expiry status (shown separately from workflow status)."""
+    if m.get("disabled"):
+        return "disabled"
     required = {"aadhar_front", "aadhar_back", "medical_certificate", "photo"}
     have = {d.get("doc_type") for d in m.get("documents", [])}
+
     if m.get("renewal_pending"):
         return "renewal_pending"
-    expiry = m.get("medical_expiry_date")
-    if expiry:
-        try:
-            exp_date = date.fromisoformat(expiry) if "T" not in expiry else datetime.fromisoformat(expiry).date()
-            if exp_date < datetime.now(timezone.utc).date():
-                return "expired"
-        except Exception:
-            pass
+
+    today = datetime.now(timezone.utc).date()
+    # Check all structured expiry date fields
+    expiry_dates = []
+    for k in EXPIRY_KEYS:
+        val = m.get(k)
+        if val:
+            try:
+                exp_date = datetime.fromisoformat(val).date() if "T" in val else date.fromisoformat(val)
+                expiry_dates.append(exp_date)
+            except Exception:
+                pass
+
+    if any(exp < today for exp in expiry_dates):
+        return "expired"
+
+    if any((exp - today).days <= 30 for exp in expiry_dates):
+        return "expiring_soon"
+
     if required.issubset(have):
         return "complete"
     return "pending"
@@ -165,12 +203,14 @@ async def next_manpower_id(contractor_id: Optional[str] = None, roll_type: str =
 
 
 async def sync_company_name(payload_dict: dict) -> dict:
-    """If contractor_id is present, force company_name to match the contractor's name."""
+    """If contractor_id is present, force company_name to match the contractor's name and sync vendor_id."""
     cid = payload_dict.get("contractor_id")
     if cid:
         contractor = await db.contractors.find_one({"id": cid})
         if contractor:
             payload_dict["company_name"] = contractor.get("name", "")
+            if contractor.get("vendor_id"):
+                payload_dict["vendor_id"] = contractor.get("vendor_id")
     return payload_dict
 
 

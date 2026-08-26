@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Upload, Download, ArrowLeft, Hash } from "lucide-react";
-import { api, formatApiError, API } from "@/lib/api";
+import { Upload, Download, ArrowLeft, Hash, Eye, Trash2, CheckCircle2, XCircle, Clock, BadgeCheck, ShieldCheck } from "lucide-react";
+import { api, formatApiError, API, contractorDocUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DocumentViewerDialog } from "@/components/DocumentViewerDialog";
 
 const ID_FORMAT_PRESETS = [
   { label: "MP-2026-000001 (default)", value: "MP-{year}-{seq:06d}" },
@@ -17,9 +18,16 @@ const ID_FORMAT_PRESETS = [
   { label: "2026-000001 (year only)", value: "{year}-{seq:06d}" },
 ];
 
+const DOC_STATUS_CONFIG = {
+  approved: { label: "Approved", icon: CheckCircle2, cls: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+  rejected: { label: "Rejected", icon: XCircle, cls: "text-rose-700 bg-rose-50 border-rose-200" },
+  pending:  { label: "Pending Approval", icon: Clock, cls: "text-amber-700 bg-amber-50 border-amber-200" },
+};
+
 /**
  * Contractor detail page — shows ESI/PF/MSME/GST compliance docs and a metadata
  * form rendered from `compliance` form config (form-builder-driven).
+ * Includes document approve/reject and Vendor ID generation.
  */
 export default function ContractorDetail() {
   const { id } = useParams();
@@ -33,7 +41,11 @@ export default function ContractorDetail() {
   const [uploadsEnabled, setUploadsEnabled] = useState(true);
   const [idFormat, setIdFormat] = useState("");
   const [idFormatOff, setIdFormatOff] = useState("");
+  const [vendorIdFormat, setVendorIdFormat] = useState("");
   const [savingIdFmt, setSavingIdFmt] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState(null);
+  const [approvingId, setApprovingId] = useState(null);
+  const [rejectingId, setRejectingId] = useState(null);
 
   const isSuperAdmin = user?.role === "super_admin";
   const isAdmin = user?.role === "super_admin" || user?.role === "admin";
@@ -50,6 +62,7 @@ export default function ContractorDetail() {
       setValues(c.compliance || {});
       setIdFormat(c.id_format || "");
       setIdFormatOff(c.id_format_offroll || "");
+      setVendorIdFormat(c.vendor_id_format || "");
     } catch (e) {
       toast.error(formatApiError(e));
       navigate("/contractors");
@@ -99,11 +112,55 @@ export default function ContractorDetail() {
     }
   };
 
+  const deleteDoc = async (docId) => {
+    if (!window.confirm("Are you sure you want to delete this document?")) return;
+    try {
+      await api.delete(`/contractors/${id}/compliance-documents/${docId}`);
+      toast.success("Document deleted");
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e));
+    }
+  };
+
+  const approveDoc = async (docId) => {
+    setApprovingId(docId);
+    try {
+      const { data } = await api.post(`/contractors/${id}/compliance-documents/${docId}/approve`);
+      if (data.vendor_id_generated) {
+        toast.success(`🎉 All documents approved! Vendor ID generated: ${data.vendor_id}`);
+      } else {
+        toast.success("Document approved");
+      }
+      setContractor(data);
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const rejectDoc = async (docId) => {
+    const reason = window.prompt("Reason for rejection (optional):");
+    if (reason === null) return; // cancelled
+    setRejectingId(docId);
+    try {
+      const { data } = await api.post(`/contractors/${id}/compliance-documents/${docId}/reject`, { reason });
+      toast.success("Document rejected");
+      setContractor(data);
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setRejectingId(null);
+    }
+  };
+
   const docFor = (docKey) => (contractor.compliance_documents || []).find((d) => d.doc_type === docKey);
 
   const saveIdFormat = async () => {
     const isChangingOn = (idFormat || "") !== (contractor.id_format || "");
     const isChangingOff = (idFormatOff || "") !== (contractor.id_format_offroll || "");
+    const isChangingVendor = (vendorIdFormat || "") !== (contractor.vendor_id_format || "");
     const willRenumber = (isChangingOn && idFormat) || (isChangingOff && idFormatOff);
     if (willRenumber && isSuperAdmin) {
       const parts = [];
@@ -125,12 +182,13 @@ export default function ContractorDetail() {
         email: contractor.email || "",
         id_format: idFormat || null,
         id_format_offroll: idFormatOff || null,
+        vendor_id_format: vendorIdFormat || null,
       });
       if (data._renumber && data._renumber.length > 0) {
         const total = data._renumber.reduce((s, r) => s + (r.updated || 0), 0);
         toast.success(`Format saved · ${total} record(s) renumbered`);
       } else {
-        toast.success("ID format saved");
+        toast.success("Format settings saved");
       }
       load();
     } catch (e) {
@@ -157,23 +215,11 @@ export default function ContractorDetail() {
     }
   };
 
-  const localPreview = (() => {
-    if (!idFormat) return contractor.next_id_preview || "";
-    const year = new Date().getFullYear();
-    try {
-      // Naive JS preview: support {year} and {seq:0Nd}
-      const nextSeq = (contractor.id_format === idFormat)
-        ? // Same format saved → use server preview number
-          (contractor.next_id_preview?.match(/\d+$/)?.[0]
-            ? parseInt(contractor.next_id_preview.match(/\d+$/)[0], 10)
-            : 1)
-        : 1; // New format → sequence starts at 1
-      return idFormat
-        .replace("{year}", year)
-        .replace(/\{seq:0(\d+)d\}/, (_, w) => String(nextSeq).padStart(parseInt(w, 10), "0"))
-        .replace("{seq}", String(nextSeq));
-    } catch { return idFormat; }
-  })();
+  // Compute vendor ID status
+  const allDocs = contractor.compliance_documents || [];
+  const hasAnyDoc = allDocs.length > 0;
+  const allApproved = hasAnyDoc && allDocs.every((d) => d.status === "approved");
+  const vendorId = contractor.vendor_id;
 
   return (
     <div className="space-y-6" data-testid="contractor-detail-page">
@@ -182,29 +228,50 @@ export default function ContractorDetail() {
           <ArrowLeft size={14} className="mr-1.5" /> All Contractors
         </Button>
         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Compliance Profile</p>
-        <h1 className="text-3xl tracking-tight font-semibold text-zinc-900" style={{ fontFamily: "Cabinet Grotesk" }}>
-          {contractor.name}
-        </h1>
-        <p className="text-sm text-zinc-600 mt-1">
-          {contractor.contact_person || "—"} · {contractor.phone || "—"} · {contractor.email || "—"}
-        </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-3xl tracking-tight font-semibold text-zinc-900" style={{ fontFamily: "Cabinet Grotesk" }}>
+              {contractor.name}
+            </h1>
+            <p className="text-sm text-zinc-600 mt-1">
+              {contractor.contact_person || "—"} · {contractor.phone || "—"} · {contractor.email || "—"}
+            </p>
+          </div>
+          {/* Vendor ID Badge */}
+          <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium shadow-sm ${
+            vendorId
+              ? "bg-emerald-50 border-emerald-300 text-emerald-800"
+              : allApproved
+                ? "bg-blue-50 border-blue-200 text-blue-700"
+                : "bg-zinc-50 border-zinc-200 text-zinc-500"
+          }`}>
+            <ShieldCheck size={16} />
+            {vendorId ? (
+              <span>Vendor ID: <strong className="font-mono tracking-widest">{vendorId}</strong></span>
+            ) : allApproved ? (
+              <span>Generating Vendor ID…</span>
+            ) : (
+              <span>Vendor ID: Pending Document Approval</span>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {isAdmin && (
           <div className="bg-white border border-zinc-200 rounded-lg p-5 lg:col-span-2" data-testid="id-format-panel">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 mb-4">
               <div className="rounded-md bg-zinc-900 text-white p-2"><Hash className="h-4 w-4" /></div>
               <div>
-                <h3 className="text-base font-medium text-zinc-900">Manpower ID Format</h3>
-                <p className="text-xs text-zinc-500">Applied when a new manpower under this contractor is <b>approved</b>. Each contractor with a custom format gets its own sequence.</p>
+                <h3 className="text-base font-medium text-zinc-900">ID Format Settings</h3>
+                <p className="text-xs text-zinc-500">Configure Manpower ID formats and the Vendor ID format for this contractor.</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* ON-ROLE format */}
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs uppercase tracking-wide text-emerald-700">On-Role format</Label>
+                  <Label className="text-xs uppercase tracking-wide text-emerald-700">On-Role Manpower ID</Label>
                   <p className="text-[11px] text-zinc-500">Used when a manpower is registered as On-Role.</p>
                 </div>
                 <Input
@@ -257,7 +324,7 @@ export default function ContractorDetail() {
               {/* OFF-ROLE format */}
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs uppercase tracking-wide text-amber-700">Off-Role format (secondary)</Label>
+                  <Label className="text-xs uppercase tracking-wide text-amber-700">Off-Role Manpower ID</Label>
                   <p className="text-[11px] text-zinc-500">Used when a manpower is registered as Off-Role. Falls back to On-Role format if blank.</p>
                 </div>
                 <Input
@@ -305,6 +372,40 @@ export default function ContractorDetail() {
                   </Button>
                 )}
               </div>
+
+              {/* VENDOR ID format */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs uppercase tracking-wide text-violet-700">Vendor ID Format</Label>
+                  <p className="text-[11px] text-zinc-500">
+                    Generated when all compliance docs are approved.{" "}
+                    Leave blank for auto: first 3 letters + year (e.g. <span className="font-mono">{(contractor.name || "VND").slice(0, 3).toUpperCase()}{new Date().getFullYear()}</span>).
+                  </p>
+                </div>
+                <Input
+                  value={vendorIdFormat}
+                  placeholder={`e.g. ${(contractor.name || "VND").slice(0, 3).toUpperCase()}${new Date().getFullYear()}`}
+                  onChange={(e) => setVendorIdFormat(e.target.value)}
+                  className="font-mono text-xs"
+                  disabled={!!vendorId}
+                  data-testid="vendor-id-format-input"
+                />
+                {vendorId ? (
+                  <div className="h-9 px-3 rounded-md border border-emerald-200 bg-emerald-50 flex items-center gap-2 font-mono text-sm text-emerald-800">
+                    <BadgeCheck size={14} className="text-emerald-600" />
+                    {vendorId}
+                    {contractor.vendor_id_generated_at && (
+                      <span className="text-[10px] text-emerald-600 ml-auto font-sans">
+                        {new Date(contractor.vendor_id_generated_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-9 px-3 rounded-md border border-dashed border-zinc-200 flex items-center text-xs text-zinc-400 italic">
+                    Not generated yet
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="mt-4 flex justify-end pt-4 border-t border-zinc-100">
@@ -312,7 +413,8 @@ export default function ContractorDetail() {
                 onClick={saveIdFormat}
                 disabled={savingIdFmt ||
                   (idFormat === (contractor.id_format || "") &&
-                   idFormatOff === (contractor.id_format_offroll || ""))}
+                   idFormatOff === (contractor.id_format_offroll || "") &&
+                   vendorIdFormat === (contractor.vendor_id_format || ""))}
                 className="bg-zinc-900 hover:bg-zinc-800 text-white"
                 data-testid="save-id-format-btn"
               >
@@ -329,32 +431,84 @@ export default function ContractorDetail() {
         {config.sections.map((sec) => {
           const docKey = sec.doc_key;
           const doc = docKey ? docFor(docKey) : null;
+          const docStatusKey = doc?.status || (doc ? "pending" : null);
+          const statusCfg = docStatusKey ? DOC_STATUS_CONFIG[docStatusKey] : null;
+          const StatusIcon = statusCfg?.icon;
+
           return (
             <div key={sec.title} className="bg-white border border-zinc-200 rounded-lg p-5" data-testid={`compliance-section-${docKey || sec.title}`}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-base font-medium text-zinc-900">{sec.title}</h3>
                   {docKey && (
-                    <p className="text-xs text-zinc-500">
-                      Document status:{" "}
-                      <span className={doc ? "text-emerald-700" : "text-amber-700"}>
-                        {doc ? "Uploaded" : "Missing"}
-                      </span>
-                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      {statusCfg ? (
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${statusCfg.cls}`}>
+                          <StatusIcon size={10} />
+                          {statusCfg.label}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-zinc-400 italic">No document uploaded</span>
+                      )}
+                    </div>
                   )}
                 </div>
                 {docKey && doc && (
-                  <a
-                    href={`${API}/contractors/${id}/compliance-documents/${doc.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    data-testid={`download-${docKey}`}
-                    className="text-xs text-zinc-700 hover:text-zinc-900 flex items-center gap-1"
-                  >
-                    <Download size={12} /> {doc.file_name}
-                  </a>
+                  <div className="flex items-center gap-2 group">
+                    <button
+                      onClick={() => setViewerDoc({ url: contractorDocUrl(id, doc.id), name: doc.file_name })}
+                      data-testid={`view-${docKey}`}
+                      className="text-xs text-zinc-700 hover:text-zinc-900 flex items-center gap-1 hover:underline text-left"
+                    >
+                      <Eye size={12} className="text-zinc-500" /> {doc.file_name}
+                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => deleteDoc(doc.id)}
+                        className="p-1 text-zinc-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete document"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
+
+              {/* Admin approve / reject buttons */}
+              {isAdmin && doc && doc.status !== "approved" && (
+                <div className="flex gap-2 mb-4">
+                  <Button
+                    size="sm"
+                    disabled={approvingId === doc.id}
+                    onClick={() => approveDoc(doc.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7 px-3"
+                    data-testid={`approve-${docKey}`}
+                  >
+                    <CheckCircle2 size={12} className="mr-1" />
+                    {approvingId === doc.id ? "Approving…" : "Approve"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={rejectingId === doc.id}
+                    onClick={() => rejectDoc(doc.id)}
+                    className="text-rose-700 border-rose-200 hover:bg-rose-50 text-xs h-7 px-3"
+                    data-testid={`reject-${docKey}`}
+                  >
+                    <XCircle size={12} className="mr-1" />
+                    {rejectingId === doc.id ? "Rejecting…" : "Reject"}
+                  </Button>
+                  {doc.reject_reason && (
+                    <span className="text-[11px] text-rose-600 self-center">Reason: {doc.reject_reason}</span>
+                  )}
+                </div>
+              )}
+              {isAdmin && doc && doc.status === "approved" && (
+                <div className="mb-4 flex items-center gap-1.5 text-[11px] text-emerald-700">
+                  <CheckCircle2 size={12} /> Approved by {doc.approved_by} on {doc.approved_at?.slice(0, 10)}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-3">
                 {sec.fields.filter((f) => f.type !== "document").map((f) => (
@@ -402,6 +556,13 @@ export default function ContractorDetail() {
           </Button>
         </div>
       )}
+
+      <DocumentViewerDialog
+        open={!!viewerDoc}
+        onOpenChange={(open) => !open && setViewerDoc(null)}
+        docUrl={viewerDoc?.url}
+        docName={viewerDoc?.name}
+      />
     </div>
   );
 }

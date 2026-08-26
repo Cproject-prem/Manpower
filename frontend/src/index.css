@@ -19,15 +19,14 @@ body {
     main { margin-left: 0 !important; padding-top: 0 !important; }
     button { display: none !important; }
     .id-pill { border: 1px solid #999 !important; }
-    a[data-testid^="doc-link-"] { display: block !important; }
     /* Hide screen-only content, show print-only content */
     .no-print { display: none !important; }
     .print-only { display: block !important; }
-    /* Force page break behavior to keep document cards together */
-    .print-doc-card { break-inside: avoid; page-break-inside: avoid; }
-    .print-img { max-width: 100%; max-height: 320px; object-fit: contain; display: block; }
-    /* Ensure images print with full color */
+    /* Ensure images and embeds print with full color */
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    /* Full-page document pages: each doc fills the page */
+    embed, object { width: 100% !important; height: 100% !important; }
+    @page { margin: 0; }
 }
 .print-only { display: none; }
 

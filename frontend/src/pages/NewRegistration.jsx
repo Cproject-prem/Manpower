@@ -13,7 +13,7 @@ const NATIVE_KEYS = new Set([
   "medical_test_date", "medical_expiry_date", "height_work_expiry_date",
   "safety_belt_expiry_date", "extension_rope_expiry_date", "ppe_register_expiry_date",
   "company_name", "street_address", "city", "state", "postal_code", "phone",
-  "reporting_cluster_manager", "work_state", "subvendor", "reference", "location",
+  "reporting_cluster_manager", "work_state", "designation", "subvendor", "reference", "location",
   "region", "roll_type", "contractor_id", "assigned_member_id",
 ]);
 
@@ -59,13 +59,19 @@ export default function NewRegistration() {
     // eslint-disable-next-line
   }, [user]);
 
-  // Auto-set company_name when contractor changes
+  // Auto-set company_name and filter assigned_member when contractor changes
   const onChange = (k, v) => {
     setValues((prev) => {
       const next = { ...prev, [k]: v };
       if (k === "contractor_id") {
         const cName = contractors.find((c) => c.id === v)?.name || "";
         next.company_name = cName;
+        if (prev.assigned_member_id) {
+          const currentMember = members.find((m) => m.id === prev.assigned_member_id);
+          if (currentMember && currentMember.contractor_id && currentMember.contractor_id !== v) {
+            next.assigned_member_id = "";
+          }
+        }
       }
       return next;
     });
@@ -82,8 +88,8 @@ export default function NewRegistration() {
       const extra = {};
       Object.entries(values).forEach(([k, v]) => {
         if (v === "" || v === null || v === undefined) return;
-        if (NATIVE_KEYS.has(k)) payload[k] = v;
-        else extra[k] = v;
+        payload[k] = v;
+        if (!NATIVE_KEYS.has(k)) extra[k] = v;
       });
       if (Object.keys(extra).length > 0) payload.extra_fields = extra;
       if (!payload.contractor_id) delete payload.contractor_id;

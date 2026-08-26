@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.db import db
 from app.deps import get_current_user, require_roles
 from app.helpers import (
-    audit, compute_dynamic_status, fire_email, filter_for_user, next_manpower_id,
+    audit, check_region_scope, compute_dynamic_status, fire_email, filter_for_user, next_manpower_id,
     notify, serialize_manpower, sync_company_name,
 )
 from app.schemas import ApprovalAction, ManpowerIn, ReassignIn, RenewalSubmitIn
@@ -41,7 +41,31 @@ async def list_manpower(
             {"city": {"$regex": q, "$options": "i"}},
         ]
     if status:
-        f["status"] = status
+        if status == "disabled":
+            f["disabled"] = True
+        elif status == "expired":
+            from datetime import datetime, timezone
+            from app.helpers import EXPIRY_KEYS
+            today_str = datetime.now(timezone.utc).date().isoformat()
+            cond = {"$or": [{k: {"$lt": today_str, "$ne": "", "$exists": True}} for k in EXPIRY_KEYS]}
+            if "$or" in f:
+                f["$and"] = [{"$or": f.pop("$or")}, cond]
+            else:
+                f.update(cond)
+        elif status == "expiring_soon":
+            from datetime import datetime, timezone, timedelta
+            from app.helpers import EXPIRY_KEYS
+            today_str = datetime.now(timezone.utc).date().isoformat()
+            thirty_days_str = (datetime.now(timezone.utc).date() + timedelta(days=30)).isoformat()
+            cond = {"$or": [{k: {"$gte": today_str, "$lte": thirty_days_str, "$ne": "", "$exists": True}} for k in EXPIRY_KEYS]}
+            if "$or" in f:
+                f["$and"] = [{"$or": f.pop("$or")}, cond]
+            else:
+                f.update(cond)
+        elif status == "renewal_pending":
+            f["renewal_pending"] = True
+        else:
+            f["status"] = status
     if contractor_id:
         f["contractor_id"] = contractor_id
     if assigned_member_id:
@@ -125,10 +149,20 @@ async def manpower_stats(user=Depends(get_current_user), region: Optional[str] =
     items = await db.manpower.find(f, {"_id": 0}).to_list(5000)
     counts = {"total": len(items), "pending_approval": 0, "active": 0, "expiring_soon": 0, "expired": 0, "renewal_pending": 0, "rejected": 0, "draft": 0, "approved": 0}
     for it in items:
+        from app.helpers import doc_status
         s = compute_dynamic_status(it)
-        if s in counts:
+        d_s = doc_status(it)
+        
+        # Count workflow status
+        if s in ["active", "draft", "rejected", "pending_approval", "approved"]:
             counts[s] += 1
-        if it.get("status") == "pending_approval":
+            
+        # Count expiry/renewal statuses from document status
+        if d_s in ["expired", "expiring_soon", "renewal_pending"]:
+            counts[d_s] += 1
+            
+        # Also ensure pending_approval counts raw status if not already counted
+        if it.get("status") == "pending_approval" and s != "pending_approval":
             counts["pending_approval"] += 1
     return counts
 
@@ -275,6 +309,8 @@ async def update_manpower(mid: str, payload: ManpowerIn, current=Depends(get_cur
         contractor = await db.contractors.find_one({"id": cid})
         if contractor:
             upd["company_name"] = contractor.get("name", "")
+            if contractor.get("vendor_id"):
+                upd["vendor_id"] = contractor.get("vendor_id")
     await db.manpower.update_one({"id": mid}, {"$set": upd})
     await audit(current, "manpower.update", mid, upd)
     doc = await db.manpower.find_one({"id": mid}, {"_id": 0})
@@ -309,8 +345,10 @@ async def approve_manpower(mid: str, payload: ApprovalAction, current=Depends(re
         raise HTTPException(status_code=404, detail="Not found")
     if m["status"] != "pending_approval":
         raise HTTPException(status_code=400, detail="Not pending approval")
+    check_region_scope(current, m.get("region"))
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
     manpower_id = m.get("manpower_id") or await next_manpower_id(m.get("contractor_id"), m.get("roll_type") or "on_role")
-    entry = {"action": "approved", "by": current["email"], "at": now_iso(), "comment": payload.comment or ""}
+    entry = {"action": "approved", "by": actor_name, "by_email": current["email"], "by_id": current["id"], "at": now_iso(), "comment": payload.comment or ""}
     await db.manpower.update_one(
         {"id": mid},
         {"$set": {"status": "active", "manpower_id": manpower_id, "updated_at": now_iso()},
@@ -318,7 +356,7 @@ async def approve_manpower(mid: str, payload: ApprovalAction, current=Depends(re
     )
     targets = [m.get("assigned_member_id"), m.get("user_id")]
     await notify([t for t in targets if t], "Application Approved", f"{m['full_name']} approved as {manpower_id}", f"/manpower/{mid}")
-    await audit(current, "manpower.approve", mid, {"manpower_id": manpower_id})
+    await audit(current, "manpower.approve", mid, {"manpower_id": manpower_id, "approved_by": actor_name, "region": m.get("region")})
     updated = await db.manpower.find_one({"id": mid}, {"_id": 0})
     fire_email("manpower_approved", manpower=updated, actor=current,
                extra_ctx={"admin_comments": payload.comment or ""})
@@ -333,7 +371,9 @@ async def reject_manpower(mid: str, payload: Optional[ApprovalAction] = None, cu
         raise HTTPException(status_code=404, detail="Not found")
     if m["status"] not in ("pending_approval",):
         raise HTTPException(status_code=400, detail="Not pending approval")
-    entry = {"action": "rejected", "by": current["email"], "at": now_iso(), "comment": payload.comment or ""}
+    check_region_scope(current, m.get("region"))
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
+    entry = {"action": "rejected", "by": actor_name, "by_email": current["email"], "by_id": current["id"], "at": now_iso(), "comment": payload.comment or ""}
     await db.manpower.update_one(
         {"id": mid},
         {"$set": {"status": "rejected", "updated_at": now_iso()},
@@ -341,7 +381,7 @@ async def reject_manpower(mid: str, payload: Optional[ApprovalAction] = None, cu
     )
     targets = [m.get("assigned_member_id"), m.get("user_id")]
     await notify([t for t in targets if t], "Application Rejected", f"{m['full_name']}: {payload.comment}", f"/manpower/{mid}")
-    await audit(current, "manpower.reject", mid, {"comment": payload.comment})
+    await audit(current, "manpower.reject", mid, {"comment": payload.comment, "rejected_by": actor_name, "region": m.get("region")})
     updated = await db.manpower.find_one({"id": mid}, {"_id": 0})
     fire_email("manpower_rejected", manpower=updated, actor=current,
                extra_ctx={"admin_comments": payload.comment or ""})
@@ -435,6 +475,8 @@ async def approve_renewal(mid: str, payload: Optional[ApprovalAction] = None, cu
     m = await db.manpower.find_one({"id": mid})
     if not m or not m.get("renewal_pending"):
         raise HTTPException(status_code=400, detail="No pending renewal")
+    check_region_scope(current, m.get("region"))
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
     pending = m.get("pending_renewal") or {}
     doc_type = pending.get("doc_type") or "medical_certificate"
     new_expiry = pending.get("expiry_date") or (datetime.now(timezone.utc).date() + timedelta(days=365)).isoformat()
@@ -452,7 +494,7 @@ async def approve_renewal(mid: str, payload: Optional[ApprovalAction] = None, cu
     field_updates = {"documents": new_docs, "renewal_pending": False, "pending_renewal": None, "updated_at": now_iso()}
     expiry_field_map = {
         "medical_certificate": "medical_expiry_date",
-        "height_work_certificate": "height_work_expiry_date",
+        "height_work_expiry_date": "height_work_expiry_date",
         "safety_belt_certificate": "safety_belt_expiry_date",
         "extension_rope_certificate": "extension_rope_expiry_date",
         "ppe_register": "ppe_register_expiry_date",
@@ -462,7 +504,7 @@ async def approve_renewal(mid: str, payload: Optional[ApprovalAction] = None, cu
     if doc_type == "medical_certificate" and new_test:
         field_updates["medical_test_date"] = new_test
 
-    entry = {"at": now_iso(), "by": current["email"], "action": "approved", "comment": payload.comment or "",
+    entry = {"at": now_iso(), "by": actor_name, "by_email": current["email"], "action": "approved", "comment": payload.comment or "",
              "doc_type": doc_type, "new_expiry": new_expiry, "new_test_date": new_test}
     await db.manpower.update_one(
         {"id": mid},
@@ -470,7 +512,7 @@ async def approve_renewal(mid: str, payload: Optional[ApprovalAction] = None, cu
     )
     targets = [m.get("assigned_member_id"), m.get("user_id")]
     await notify([t for t in targets if t], "Renewal Approved", f"{m['full_name']} · {doc_type.replace('_', ' ')} renewed until {new_expiry}", f"/manpower/{mid}")
-    await audit(current, "manpower.renewal.approve", mid, {"doc_type": doc_type, "new_expiry": new_expiry})
+    await audit(current, "manpower.renewal.approve", mid, {"doc_type": doc_type, "new_expiry": new_expiry, "approved_by": actor_name, "region": m.get("region")})
     updated = await db.manpower.find_one({"id": mid}, {"_id": 0})
     fire_email("renewal_approved", manpower=updated, actor=current,
                extra_ctx={"doc_type": doc_type.replace('_', ' ').title(), "new_expiry": new_expiry,
@@ -484,7 +526,9 @@ async def reject_renewal(mid: str, payload: Optional[ApprovalAction] = None, cur
     m = await db.manpower.find_one({"id": mid})
     if not m or not m.get("renewal_pending"):
         raise HTTPException(status_code=400, detail="No pending renewal")
-    entry = {"at": now_iso(), "by": current["email"], "action": "rejected", "comment": payload.comment or ""}
+    check_region_scope(current, m.get("region"))
+    actor_name = current.get("name") or current.get("full_name") or current["email"]
+    entry = {"at": now_iso(), "by": actor_name, "by_email": current["email"], "action": "rejected", "comment": payload.comment or ""}
     await db.manpower.update_one(
         {"id": mid},
         {"$set": {"renewal_pending": False, "pending_renewal": None, "updated_at": now_iso()},
@@ -492,7 +536,7 @@ async def reject_renewal(mid: str, payload: Optional[ApprovalAction] = None, cur
     )
     targets = [m.get("assigned_member_id"), m.get("user_id")]
     await notify([t for t in targets if t], "Renewal Rejected", f"{m['full_name']}: {payload.comment}", f"/manpower/{mid}")
-    await audit(current, "manpower.renewal.reject", mid)
+    await audit(current, "manpower.renewal.reject", mid, {"rejected_by": actor_name, "region": m.get("region")})
     updated = await db.manpower.find_one({"id": mid}, {"_id": 0})
     pending = m.get("pending_renewal") or {}
     fire_email("renewal_rejected", manpower=updated, actor=current,

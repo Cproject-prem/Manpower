@@ -1,7 +1,7 @@
 """All Pydantic request/response models."""
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class LoginIn(BaseModel):
@@ -40,10 +40,12 @@ class ContractorIn(BaseModel):
     email: Optional[str] = ""
     id_format: Optional[str] = None            # On-role ID template
     id_format_offroll: Optional[str] = None    # Off-role ID template
+    vendor_id_format: Optional[str] = None     # Vendor ID template e.g. "ABC2026" or leave blank for auto
     extra_fields: Optional[dict] = None
 
 
 class ManpowerIn(BaseModel):
+    model_config = ConfigDict(extra="allow")
     full_name: str
     medical_test_date: Optional[str] = None
     medical_expiry_date: Optional[str] = None
@@ -60,6 +62,7 @@ class ManpowerIn(BaseModel):
     blood_group: Optional[str] = ""
     reporting_cluster_manager: Optional[str] = ""
     work_state: Optional[str] = ""
+    designation: Optional[str] = ""
     subvendor: Optional[str] = ""
     reporting_manager_email: Optional[str] = ""
     reference: Optional[str] = ""

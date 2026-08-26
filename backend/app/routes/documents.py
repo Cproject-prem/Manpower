@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+import os
 
 from app.config import ALLOWED_EXT, MAX_FILE_SIZE, UPLOAD_DIR
 from app.db import db
@@ -95,16 +96,57 @@ async def upload_document(
 
 
 @router.get("/documents/{doc_id}")
-async def download_document(doc_id: str, current=Depends(get_current_user)):
+async def download_document(doc_id: str, download: bool = False, current=Depends(get_current_user)):
     f = await filter_for_user(current)
     f["documents.id"] = doc_id
     m = await db.manpower.find_one(f)
     if not m:
         raise HTTPException(status_code=404, detail="Document not found")
-    doc = next((d for d in m["documents"] if d["id"] == doc_id), None)
+        
+    doc = next((d for d in m.get("documents", []) if d["id"] == doc_id), None)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail="Document metadata missing")
+        
     full = UPLOAD_DIR / doc["file_path"]
     if not full.exists():
         raise HTTPException(status_code=404, detail="File missing on disk")
-    return FileResponse(str(full), filename=doc["file_name"])
+        
+    disp = "attachment" if download else "inline"
+    return FileResponse(str(full), filename=doc["file_name"], content_disposition_type=disp)
+
+
+@router.delete("/manpower/{mid}/documents/{doc_id}")
+async def delete_document(mid: str, doc_id: str, current=Depends(get_current_user)):
+    f = await filter_for_user(current)
+    f["id"] = mid
+    m = await db.manpower.find_one(f)
+    if not m:
+        raise HTTPException(status_code=404, detail="Manpower not found")
+        
+    doc = next((d for d in m.get("documents", []) if d["id"] == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    # Permission check: super_admin, admin, or uploader (if draft/rejected)
+    is_admin = current["role"] in ("super_admin", "admin")
+    can_delete = is_admin or (
+        current["id"] == doc.get("uploaded_by") and m.get("status") in ("draft", "rejected")
+    )
+    if not can_delete:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this document")
+        
+    # Delete file from disk
+    full_path = UPLOAD_DIR / doc["file_path"]
+    if full_path.exists():
+        try:
+            os.remove(full_path)
+        except Exception:
+            pass # Best effort deletion
+            
+    # Remove from DB
+    await db.manpower.update_one(
+        {"id": mid}, 
+        {"$pull": {"documents": {"id": doc_id}}, "$set": {"updated_at": now_iso()}}
+    )
+    await audit(current, "document.delete", mid, {"doc_type": doc["doc_type"], "file": doc["file_name"]})
+    return {"status": "ok"}

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Upload, Send, Check, X, Download, RefreshCw } from "lucide-react";
+import { Upload, Send, Check, X, Download, RefreshCw, Eye, Trash2 } from "lucide-react";
 import { api, formatApiError, API, docUrl } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { DocumentViewerDialog } from "@/components/DocumentViewerDialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -44,6 +46,7 @@ export default function ManpowerProfile() {
   const [config, setConfig] = useState(null);
   const [contractors, setContractors] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [viewerDoc, setViewerDoc] = useState(null);
   const [members, setMembers] = useState([]);
   const [comment, setComment] = useState("");
   const [showApprove, setShowApprove] = useState(false);
@@ -56,6 +59,7 @@ export default function ManpowerProfile() {
   const [linkUserId, setLinkUserId] = useState("");
   const [uploading, setUploading] = useState(false);
   const [docBlobs, setDocBlobs] = useState({});
+  const [pdfPages, setPdfPages] = useState({});
   const [uploadsEnabled, setUploadsEnabled] = useState(true);
 
   // Revoke blob URLs on unmount to free memory
@@ -110,6 +114,17 @@ export default function ManpowerProfile() {
       toast.error(formatApiError(e));
     } finally {
       setUploading(false);
+    }
+  };
+
+  const deleteDoc = async (docId) => {
+    if (!window.confirm("Are you sure you want to delete this document?")) return;
+    try {
+      await api.delete(`/manpower/${m.id}/documents/${docId}`);
+      toast.success("Document deleted");
+      await load();
+    } catch (e) {
+      toast.error(formatApiError(e));
     }
   };
 
@@ -172,13 +187,13 @@ export default function ManpowerProfile() {
         }));
       }
       // Also include manpower native fields not in config (safety net)
-      ["full_name","phone","blood_group","reporting_manager_email","medical_test_date","medical_expiry_date","height_work_expiry_date","safety_belt_expiry_date","extension_rope_expiry_date","ppe_register_expiry_date","company_name","street_address","city","state","postal_code","reporting_cluster_manager","work_state","subvendor","reference","location","contractor_id","assigned_member_id"].forEach((k) => nativeKeys.add(k));
+      ["full_name","phone","blood_group","reporting_manager_email","medical_test_date","medical_expiry_date","height_work_expiry_date","safety_belt_expiry_date","extension_rope_expiry_date","ppe_register_expiry_date","company_name","street_address","city","state","postal_code","reporting_cluster_manager","work_state","designation","subvendor","reference","location","region","contractor_id","assigned_member_id"].forEach((k) => nativeKeys.add(k));
       const payload = {};
       const extra = {};
       Object.entries(editForm).forEach(([k, v]) => {
         if (v === "" || v === null || v === undefined) return;
-        if (nativeKeys.has(k)) payload[k] = v;
-        else extra[k] = v;
+        payload[k] = v;
+        if (!nativeKeys.has(k)) extra[k] = v;
       });
       if (Object.keys(extra).length > 0) payload.extra_fields = extra;
       await api.put(`/manpower/${m.id}`, payload);
@@ -218,28 +233,67 @@ export default function ManpowerProfile() {
   };
 
   const handlePrint = async () => {
-    // Preload image documents as authenticated blobs so <img> can render them
-    // even when the backend is on a different origin (localhost dev, etc.).
-    const imgDocs = (m.documents || []).filter((d) =>
-      /\.(jpe?g|png|gif|webp)$/i.test(d.file_name || "")
-    );
+    // Step 1: Fetch all documents as authenticated blob URLs
+    const allDocs = m.documents || [];
     const newMap = { ...docBlobs };
     try {
       await Promise.all(
-        imgDocs.map(async (d) => {
+        allDocs.map(async (d) => {
           if (newMap[d.id]) return;
           try {
             const res = await api.get(`/documents/${d.id}`, { responseType: "blob" });
             newMap[d.id] = URL.createObjectURL(res.data);
-          } catch (e) {
-            // ignore individual failures — DocPreview will show a placeholder
-          }
+          } catch { /* ignore */ }
         })
       );
       setDocBlobs(newMap);
     } catch {}
-    // Wait for any <img> to finish loading with the fresh blob URLs
-    await new Promise((res) => setTimeout(res, 60));
+
+    // Step 2: Rasterise PDFs to images using PDF.js from CDN
+    // (browsers cannot print <embed> PDF content, but <img> always works)
+    const pdfDocs = allDocs.filter((d) => /\.pdf$/i.test(d.file_name || ""));
+    const newPdfPages = { ...pdfPages };
+    if (pdfDocs.length > 0) {
+      try {
+        await new Promise((resolve, reject) => {
+          if (window.pdfjsLib) return resolve();
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+          script.onload = () => {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+            resolve();
+          };
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+
+        await Promise.all(
+          pdfDocs.map(async (d) => {
+            if (newPdfPages[d.id]) return;
+            const blobUrl = newMap[d.id];
+            if (!blobUrl) return;
+            try {
+              const pdf = await window.pdfjsLib.getDocument(blobUrl).promise;
+              const pages = [];
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement("canvas");
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+                pages.push(canvas.toDataURL("image/png"));
+              }
+              newPdfPages[d.id] = pages;
+            } catch { /* ignore individual failures */ }
+          })
+        );
+        setPdfPages(newPdfPages);
+      } catch { /* pdfjs not available */ }
+    }
+
+    // Step 3: Wait for images to load then print
+    await new Promise((res) => setTimeout(res, 150));
     const printRoot = document.querySelector('[data-testid="manpower-print-view"]');
     if (printRoot) {
       const imgs = Array.from(printRoot.querySelectorAll("img"));
@@ -283,6 +337,7 @@ export default function ManpowerProfile() {
         memberName={memberName}
         config={config}
         docBlobs={docBlobs}
+        pdfPages={pdfPages}
       />
       <div className="no-print space-y-6">
       {/* Header */}
@@ -308,10 +363,16 @@ export default function ManpowerProfile() {
               </h1>
               {m.manpower_id && <span className="id-pill">{m.manpower_id}</span>}
               <StatusBadge status={m.display_status} />
-              {m.disabled && <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700" data-testid="disabled-badge">disabled</span>}
             </div>
-            <p className="mt-1 text-sm text-zinc-600">
-              {contractor?.name || "No contractor"} · Member: {memberName}
+            <p className="mt-1 text-sm text-zinc-600 flex items-center flex-wrap gap-x-2 gap-y-1">
+              <span>{contractor?.name || "No contractor"}</span>
+              {contractor?.vendor_id && (
+                <span className="inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
+                  {contractor.vendor_id}
+                </span>
+              )}
+              <span className="text-zinc-400">·</span>
+              <span>Member: {memberName}</span>
             </p>
           </div>
         </div>
@@ -390,6 +451,7 @@ export default function ManpowerProfile() {
             <Detail label="Location" value={m.location} />
             <Detail label="Cluster Manager" value={m.reporting_cluster_manager} />
             <Detail label="Work State" value={m.work_state} />
+            <Detail label="Designation" value={m.designation} />
             <Detail label="Subvendor" value={m.subvendor} />
             <Detail label="Reference" value={m.reference} />
           </div>
@@ -438,17 +500,25 @@ export default function ManpowerProfile() {
                     </span>
                   </div>
                   {docs.map((d) => (
-                    <a
-                      key={d.id}
-                      href={docUrl(d.id)}
-                      target="_blank"
-                      rel="noreferrer"
-                      data-testid={`doc-link-${d.id}`}
-                      className="flex items-center justify-between text-xs text-zinc-700 hover:text-zinc-900 mb-1 truncate"
-                    >
-                      <span className="truncate">{d.file_name}</span>
-                      <Download size={12} />
-                    </a>
+                    <div key={d.id} className="flex items-center justify-between text-xs text-zinc-700 hover:text-zinc-900 mb-1 group">
+                      <button
+                        onClick={() => setViewerDoc({ url: docUrl(d.id), name: d.file_name })}
+                        data-testid={`doc-link-${d.id}`}
+                        className="flex items-center gap-1.5 truncate flex-1 text-left"
+                      >
+                        <Eye size={12} className="text-zinc-500" />
+                        <span className="truncate hover:underline">{d.file_name}</span>
+                      </button>
+                      {canEditDetails && (
+                        <button
+                          onClick={() => deleteDoc(d.id)}
+                          className="p-1 text-zinc-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete document"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   ))}
                   {showUploadInput && (
                     <Input
@@ -506,6 +576,13 @@ export default function ManpowerProfile() {
           <HistoryList title="Admin Comments" items={m.admin_comments} />
         </TabsContent>
       </Tabs>
+
+      <DocumentViewerDialog
+        open={!!viewerDoc}
+        onOpenChange={(open) => !open && setViewerDoc(null)}
+        docUrl={viewerDoc?.url}
+        docName={viewerDoc?.name}
+      />
 
       {/* Approve dialog */}
       <Dialog open={showApprove} onOpenChange={setShowApprove}>
@@ -629,6 +706,7 @@ export default function ManpowerProfile() {
             <EditField k="location" label="Location" form={editForm} setForm={setEditForm} />
             <EditField k="reporting_cluster_manager" label="Cluster Manager" form={editForm} setForm={setEditForm} />
             <EditField k="work_state" label="Work State" form={editForm} setForm={setEditForm} />
+            <EditField k="designation" label="Designation" form={editForm} setForm={setEditForm} />
             <EditField k="subvendor" label="Subvendor" form={editForm} setForm={setEditForm} />
             <EditField k="reference" label="Reference" form={editForm} setForm={setEditForm} />
           </div>

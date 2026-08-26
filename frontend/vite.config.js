@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => {
     envPrefix: ["VITE_", "REACT_APP_"],
     server: {
       host: "0.0.0.0",
-      port: 3000,
+      port: 3001,
       strictPort: true,
       // Allow preview/sandbox hostnames (e.g. *.preview.emergentagent.com)
       allowedHosts: true,
@@ -52,7 +52,7 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       host: "0.0.0.0",
-      port: 3000,
+      port: 3001,
       allowedHosts: true,
     },
     build: {

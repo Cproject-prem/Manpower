@@ -22,7 +22,14 @@ def _apply_extra_filters(base: dict, contractor_id: Optional[str], member_id: Op
     if location:
         f["location"] = location
     if region:
-        f["region"] = region
+        wanted = [r.strip() for r in region.split(",") if r.strip()]
+        if wanted:
+            existing = f.get("region")
+            if isinstance(existing, dict) and "$in" in existing:
+                allowed = [r for r in wanted if r in existing["$in"]]
+                f["region"] = {"$in": allowed} if allowed else {"$in": ["__none__"]}
+            else:
+                f["region"] = {"$in": wanted}
     return f
 
 
@@ -40,20 +47,28 @@ async def report_summary(
 
     by_contractor, by_member, by_location, by_region = {}, {}, {}, {}
 
-    def _inc(bucket, key, status):
-        if key not in bucket:
-            bucket[key] = {"total": 0, "active": 0, "expiring_soon": 0, "expired": 0,
-                           "renewal_pending": 0, "pending_approval": 0, "rejected": 0}
-        bucket[key]["total"] += 1
-        if status in bucket[key]:
-            bucket[key][status] += 1
-
     for it in items:
+        from app.helpers import doc_status
         s = compute_dynamic_status(it)
-        _inc(by_contractor, it.get("contractor_id") or "Unassigned", s)
-        _inc(by_member, it.get("assigned_member_id") or "Unassigned", s)
-        _inc(by_location, it.get("location") or "Unassigned", s)
-        _inc(by_region, it.get("region") or "Unassigned", s)
+        d_s = doc_status(it)
+        
+        for bucket, val in [(by_contractor, it.get("contractor_id")), 
+                            (by_member, it.get("assigned_member_id")), 
+                            (by_location, it.get("location")), 
+                            (by_region, it.get("region"))]:
+            key = val or "Unassigned"
+            if key not in bucket:
+                bucket[key] = {"total": 0, "active": 0, "expiring_soon": 0, "expired": 0,
+                               "renewal_pending": 0, "pending_approval": 0, "rejected": 0, "draft": 0}
+            bucket[key]["total"] += 1
+            
+            # Workflow status
+            if s in bucket[key]:
+                bucket[key][s] += 1
+                
+            # Expiry status from doc_status
+            if d_s in ["expired", "expiring_soon", "renewal_pending"]:
+                bucket[key][d_s] += 1
 
     # Collect distinct filter option values from the full (pre-filter) dataset for dropdowns
     all_items = await db.manpower.find(base_f, {"contractor_id": 1, "assigned_member_id": 1,
@@ -87,7 +102,7 @@ async def export_report(
     items = await db.manpower.find(f, {"_id": 0}).to_list(5000)
 
     headers = ["manpower_id", "full_name", "contractor_id", "assigned_member_id",
-               "region", "location", "phone", "medical_expiry_date",
+               "region", "location", "designation", "phone", "medical_expiry_date",
                "status", "display_status", "created_at"]
     output = io.StringIO()
     output.write(",".join(headers) + "\n")

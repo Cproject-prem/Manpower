@@ -141,8 +141,8 @@ Attempts to create/read/update outside one's scope return 404 or 403.
 
 | Ability                                | super_admin | admin | vendor_admin | member | manpower |
 | -------------------------------------- | :---------: | :---: | :----------: | :----: | :------: |
-| See all manpower                       |      ✅      |   ✅   |              |        |          |
-| See own contractor's manpower          |      ✅      |   ✅   |      ✅       |        |          |
+| See all manpower                       |      ✅     |   ✅ |              |        |          |
+| See own contractor's manpower          |      ✅     |   ✅ |      ✅      |        |          |
 | See own submissions only               |             |       |              |   ✅    |          |
 | See own record only                    |             |       |              |        |    ✅     |
 | Approve / Reject                       |      ✅      |   ✅   |              |        |          |

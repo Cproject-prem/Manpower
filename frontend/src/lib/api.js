@@ -23,6 +23,11 @@ export const docUrl = (docId) => {
   return t ? `${API}/documents/${docId}?token=${encodeURIComponent(t)}` : `${API}/documents/${docId}`;
 };
 
+export const contractorDocUrl = (cid, docId) => {
+  const t = getToken();
+  return t ? `${API}/contractors/${cid}/compliance-documents/${docId}?token=${encodeURIComponent(t)}` : `${API}/contractors/${cid}/compliance-documents/${docId}`;
+};
+
 export const api = axios.create({
   baseURL: API,
   // NOTE: we intentionally do NOT set `withCredentials: true`. The backend echoes

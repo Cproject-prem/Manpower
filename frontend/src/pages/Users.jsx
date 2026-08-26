@@ -211,7 +211,12 @@ export default function Users() {
                 <td className="py-3 px-4 font-medium text-zinc-900">{u.name}</td>
                 <td className="py-3 px-4 text-zinc-700 mono text-xs">{u.email}</td>
                 <td className="py-3 px-4"><span className="id-pill">{u.role}</span></td>
-                <td className="py-3 px-4 text-zinc-600">{contractorName(u.contractor_id)}</td>
+                <td className="py-3 px-4 text-zinc-600">
+                  <span>{contractorName(u.contractor_id)}</span>
+                  {(() => { const c = contractors.find((c) => c.id === u.contractor_id); return c?.vendor_id ? (
+                    <span className="ml-1.5 font-mono text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">{c.vendor_id}</span>
+                  ) : null; })()}
+                </td>
                 <td className="py-3 px-4">
                   <span className={`text-xs ${u.disabled ? "text-rose-700" : "text-emerald-700"}`}>
                     {u.disabled ? "Disabled" : "Active"}
