@@ -21,6 +21,7 @@ export default function BackupPanel() {
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreFile, setRestoreFile] = useState(null);
+  const [restorePassword, setRestorePassword] = useState("");
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [confirmStoredId, setConfirmStoredId] = useState(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -81,11 +82,15 @@ export default function BackupPanel() {
     try {
       const fd = new FormData();
       fd.append("file", restoreFile);
+      if (restorePassword && restorePassword.trim()) {
+        fd.append("password", restorePassword.trim());
+      }
       const { data } = await api.post("/settings/restore", fd);
-      const totalDocs = Object.values(data.stats.collections || {}).reduce((a, b) => a + b, 0);
+      const totalDocs = Object.values(data.stats.collections || {}).reduce((a, b) => (typeof b === "number" ? a + b : a), 0);
       toast.success(`Restored ${totalDocs} records + ${data.stats.files} files`);
       setConfirmRestore(false);
       setRestoreFile(null);
+      setRestorePassword("");
       setTimeout(() => window.location.reload(), 800);
     } catch (e) {
       toast.error(formatApiError(e));
@@ -215,14 +220,14 @@ export default function BackupPanel() {
           <input
             ref={restoreInputRef}
             type="file"
-            accept=".zip,application/zip"
+            accept=".zip,.rar,.tar.gz,.tgz,application/zip,application/x-rar-compressed,application/x-rar,application/x-tar,application/gzip"
             className="hidden"
             data-testid="restore-file-input"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) { setRestoreFile(f); setConfirmRestore(true); } }}
           />
           <Button onClick={() => restoreInputRef.current?.click()} variant="outline" disabled={restoring} data-testid="restore-pick-btn">
             <Upload size={14} className="mr-2" />
-            Choose ZIP to Restore…
+            Choose Backup (ZIP / RAR) to Restore…
           </Button>
         </div>
       </div>
@@ -360,15 +365,25 @@ export default function BackupPanel() {
       </div>
 
       {/* Confirm restore (uploaded file) */}
-      <Dialog open={confirmRestore} onOpenChange={(o) => { if (!o) { setConfirmRestore(false); setRestoreFile(null); } }}>
+      <Dialog open={confirmRestore} onOpenChange={(o) => { if (!o) { setConfirmRestore(false); setRestoreFile(null); setRestorePassword(""); } }}>
         <DialogContent data-testid="restore-confirm-dialog">
           <DialogHeader><DialogTitle>Restore from backup?</DialogTitle></DialogHeader>
           <div className="space-y-3 text-sm text-zinc-700">
             <p>You are about to restore <span className="mono">{restoreFile?.name}</span> ({restoreFile ? Math.round(restoreFile.size / 1024) : 0} KB).</p>
             <p className="text-rose-700 font-medium">Every current record and uploaded file will be replaced. This cannot be undone.</p>
+            <div className="pt-2 space-y-1.5">
+              <Label className="text-xs text-zinc-700">Decryption Password (Optional if encrypted RAR / ZIP)</Label>
+              <Input
+                type="password"
+                placeholder="Enter password (e.g. cmes)"
+                value={restorePassword}
+                onChange={(e) => setRestorePassword(e.target.value)}
+                className="text-xs"
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setConfirmRestore(false); setRestoreFile(null); }} disabled={restoring}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setConfirmRestore(false); setRestoreFile(null); setRestorePassword(""); }} disabled={restoring}>Cancel</Button>
             <Button onClick={doRestore} disabled={restoring} className="bg-rose-700 hover:bg-rose-800 text-white" data-testid="restore-confirm-btn">
               {restoring ? <Loader2 className="mr-2 animate-spin" size={14} /> : <RefreshCw size={14} className="mr-2" />}
               {restoring ? "Restoring…" : "Yes, restore"}

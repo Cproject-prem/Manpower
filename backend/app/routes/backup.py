@@ -97,85 +97,169 @@ async def create_backup(current=Depends(require_roles("super_admin"))):
     )
 
 
-async def _restore_from_bytes(zip_bytes: bytes, current: dict) -> dict:
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes), mode="r")
-    except zipfile.BadZipFile:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid ZIP archive")
+def _find_rar_bin() -> Optional[str]:
+    for name in ("unrar", "rar", "unrar.exe", "rar.exe", "WinRAR.exe"):
+        found = shutil.which(name)
+        if found:
+            return found
+    for cand in (r"C:\Program Files\WinRAR\Rar.exe", r"C:\Program Files\WinRAR\WinRAR.exe", r"C:\Program Files (x86)\WinRAR\Rar.exe"):
+        if os.path.exists(cand):
+            return cand
+    return None
 
-    names = zf.namelist()
-    if "manifest.json" not in names:
-        raise HTTPException(status_code=400, detail="Archive is missing manifest.json — is it a portal backup?")
 
-    manifest = json.loads(zf.read("manifest.json"))
-    if manifest.get("backup_version") != BACKUP_VERSION:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Incompatible backup version {manifest.get('backup_version')} (this server expects {BACKUP_VERSION})",
-        )
+async def _restore_from_bytes(raw_bytes: bytes, current: dict, password: Optional[str] = None) -> dict:
+    with tempfile.TemporaryDirectory() as tmp_dir_str:
+        tmp_dir = Path(tmp_dir_str)
+        extracted_dir = tmp_dir / "extracted"
+        extracted_dir.mkdir(parents=True, exist_ok=True)
+        extracted_ok = False
 
-    self_email = current.get("email")
-    stats = {"collections": {}, "files": 0}
+        # 1. Try standard ZIP extraction
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw_bytes), mode="r") as zf:
+                zf.extractall(extracted_dir)
+                extracted_ok = True
+        except Exception:
+            pass
 
-    for coll_name in manifest.get("collections", []):
-        entry = f"db/{coll_name}.json"
-        if entry not in names:
-            continue
-        docs = json_util.loads(zf.read(entry).decode("utf-8")) or []
-        await db[coll_name].drop()
-        if docs:
-            await db[coll_name].insert_many(docs)
-        stats["collections"][coll_name] = len(docs)
+        # 2. Try RAR extraction
+        if not extracted_ok:
+            rar_bin = _find_rar_bin()
+            if rar_bin:
+                tmp_rar = tmp_dir / "archive.rar"
+                tmp_rar.write_bytes(raw_bytes)
 
-    if self_email:
-        exists = await db.users.find_one({"email": self_email})
-        if not exists:
-            await db.users.insert_one({
-                "id": current["id"],
-                "email": current["email"],
-                "password_hash": current["password_hash"],
-                "name": current.get("name") or "Super Admin",
-                "role": "super_admin",
-                "disabled": False,
-                "restored_at": now_iso(),
-            })
+                passwords_to_try = []
+                if password and password.strip():
+                    passwords_to_try.append(password.strip())
+                for default_p in ("cmes", "Admin@123", "FormForgeBackup@2026", (os.environ.get("BACKUP_PASSWORD") or "").strip(), ""):
+                    if default_p and default_p not in passwords_to_try:
+                        passwords_to_try.append(default_p)
+                if "" not in passwords_to_try:
+                    passwords_to_try.append("")
 
-    # Restore uploads (wipe, then unpack). Preserve _backups/ so historical
-    # archives remain available after a restore.
-    preserved: dict[str, bytes] = {}
-    if BACKUPS_DIR.exists():
-        for fp in BACKUPS_DIR.glob("*"):
-            if fp.is_file():
-                preserved[fp.name] = fp.read_bytes()
+                for p in passwords_to_try:
+                    cmd = [rar_bin, "x", f"-p{p}", "-y", str(tmp_rar), str(extracted_dir) + os.sep]
+                    res = subprocess.run(cmd, capture_output=True, text=True)
+                    if res.returncode == 0:
+                        extracted_ok = True
+                        break
 
-    if UPLOAD_DIR.exists():
-        shutil.rmtree(UPLOAD_DIR, ignore_errors=True)
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
-    for name, blob in preserved.items():
-        (BACKUPS_DIR / name).write_bytes(blob)
+        # 3. Try TAR / GZ extraction
+        if not extracted_ok:
+            try:
+                tmp_tar = tmp_dir / "archive.tar.gz"
+                tmp_tar.write_bytes(raw_bytes)
+                with tarfile.open(tmp_tar, "r:*") as tf:
+                    tf.extractall(extracted_dir)
+                    extracted_ok = True
+            except Exception:
+                pass
 
-    for entry in names:
-        if not entry.startswith("uploads/") or entry.endswith("/"):
-            continue
-        rel = entry[len("uploads/"):]
-        target = UPLOAD_DIR / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with target.open("wb") as out:
-            out.write(zf.read(entry))
-        stats["files"] += 1
+        if not extracted_ok:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract backup archive. Please ensure it is a valid .zip, .rar, or .tar.gz file (with the correct password if encrypted)."
+            )
 
-    await audit(current, "backup.restore", "archive", stats)
-    return {"ok": True, "stats": stats, "manifest": manifest}
+        # Look for files directly in extracted_dir or inside a single top-level folder
+        root_dir = extracted_dir
+        sub_items = [p for p in root_dir.iterdir()]
+        if len(sub_items) == 1 and sub_items[0].is_dir() and not (root_dir / "manifest.json").exists() and not (root_dir / "db").exists():
+            root_dir = sub_items[0]
+
+        manifest_path = root_dir / "manifest.json"
+        manifest = {}
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        stats = {"collections": {}, "files": 0}
+
+        # A) Restore JSON collection files (db/<collection>.json)
+        db_dir = root_dir / "db"
+        if db_dir.exists() and db_dir.is_dir():
+            for json_file in db_dir.glob("*.json"):
+                coll_name = json_file.stem
+                try:
+                    docs = json_util.loads(json_file.read_text(encoding="utf-8")) or []
+                    await db[coll_name].drop()
+                    if docs:
+                        await db[coll_name].insert_many(docs)
+                    stats["collections"][coll_name] = len(docs)
+                except Exception as e:
+                    stats["collections"][coll_name] = f"error: {e}"
+
+        # B) Restore Mongo dump archive if present (mongo/dump.archive)
+        archive_path = root_dir / "mongo" / "dump.archive"
+        if archive_path.exists():
+            mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+            db_name = os.environ.get("DB_NAME", "cmes_mp_db")
+            try:
+                subprocess.run(
+                    ["mongorestore", f"--uri={mongo_url}", f"--nsInclude={db_name}.*", "--drop", "--gzip", f"--archive={archive_path}"],
+                    check=True, capture_output=True, timeout=600
+                )
+                stats["collections"]["mongo_archive"] = "restored"
+            except Exception as e:
+                stats["collections"]["mongo_archive"] = f"warning: {e}"
+
+        # Maintain Super Admin access
+        self_email = current.get("email")
+        if self_email:
+            exists = await db.users.find_one({"email": self_email})
+            if not exists:
+                await db.users.insert_one({
+                    "id": current.get("id") or new_id("usr"),
+                    "email": current["email"],
+                    "password_hash": current.get("password_hash") or "",
+                    "name": current.get("name") or "Super Admin",
+                    "role": "super_admin",
+                    "disabled": False,
+                    "restored_at": now_iso(),
+                })
+
+        # Restore uploads safely (without deleting the Docker mountpoint!)
+        uploads_src = root_dir / "uploads"
+        if uploads_src.exists() and uploads_src.is_dir():
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            for item in UPLOAD_DIR.iterdir():
+                if item == BACKUPS_DIR:
+                    continue
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
+                except Exception:
+                    pass
+
+            for src_item in uploads_src.rglob("*"):
+                if src_item.is_file():
+                    rel = src_item.relative_to(uploads_src)
+                    target = UPLOAD_DIR / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.copy2(src_item, target)
+                        stats["files"] += 1
+                    except Exception:
+                        pass
+
+        await audit(current, "backup.restore", "archive", stats)
+        return {"ok": True, "stats": stats, "manifest": manifest}
 
 
 @router.post("/restore")
 async def restore_backup(
     file: UploadFile = File(...),
+    password: Optional[str] = Form(None),
     current=Depends(require_roles("super_admin")),
 ):
     contents = await file.read()
-    return await _restore_from_bytes(contents, current)
+    return await _restore_from_bytes(contents, current, password=password)
 
 
 # ============ auto-backup config ============
