@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 from bson import json_util
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 
 from app.config import UPLOAD_DIR
