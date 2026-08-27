@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("superadmin@portal.com");
-  const [password, setPassword] = useState("Admin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (user) return <Navigate to="/dashboard" replace />;
@@ -52,6 +52,7 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -63,6 +64,7 @@ export default function Login() {
               <Input
                 id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -78,11 +80,6 @@ export default function Login() {
               {loading ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-
-          <div className="text-xs text-zinc-500 border-t border-zinc-200 pt-4">
-            Default Super Admin: <span className="mono">superadmin@portal.com</span> /{" "}
-            <span className="mono">Admin@123</span>
-          </div>
         </div>
       </div>
 
