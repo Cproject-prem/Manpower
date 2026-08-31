@@ -132,7 +132,7 @@ export default function ManpowerProfile() {
 
 
 
-  const isAdmin = user.role === "super_admin" || user.role === "admin";
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin";
   const contractor = contractors.find((c) => c.id === m.contractor_id);
   const memberObj = members.find((u) => u.id === m.assigned_member_id)
     || members.find((u) => u.id === m.created_by && u.role === "member")
@@ -385,11 +385,11 @@ export default function ManpowerProfile() {
   });
   const linkedUser = members.find((u) => u.id === m.user_id);
   const photoDoc = (m.documents || []).find((d) => d.doc_type === "photo");
-  const isMember = user.role === "member";
-  const isManpower = user.role === "manpower";
+  const isMember = user?.role === "member";
+  const isManpower = user?.role === "manpower";
   const canEditDetails = isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected"));
   const canUploadInitial = uploadsEnabled && (isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected")));
-  const canLinkUser = isAdmin || user.role === "vendor_admin";
+  const canLinkUser = isAdmin || user?.role === "vendor_admin";
 
 
 
@@ -907,7 +907,6 @@ export default function ManpowerProfile() {
                   ))}
               </select>
             </div>
-            <EditField k="work_state" label="Work State" form={editForm} setForm={setEditForm} />
             <EditField k="designation" label="Designation" form={editForm} setForm={setEditForm} />
             <EditField k="subvendor" label="Subvendor" form={editForm} setForm={setEditForm} />
             <EditField k="reference" label="Reference" form={editForm} setForm={setEditForm} />

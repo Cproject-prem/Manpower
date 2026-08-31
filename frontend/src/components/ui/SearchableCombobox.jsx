@@ -28,15 +28,18 @@ export default function SearchableCombobox({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const safeOptions = Array.isArray(options) ? options : [];
+
   // Filter options based on search
-  const filtered = options.filter((opt) => {
+  const filtered = safeOptions.filter((opt) => {
+    if (!opt) return false;
     const label = typeof opt === "string" ? opt : opt.label || opt.name || "";
-    return label.toLowerCase().includes(search.toLowerCase());
+    return String(label).toLowerCase().includes(search.toLowerCase());
   });
 
   const selectedLabel = (() => {
     if (!value) return "";
-    const match = options.find((opt) => (typeof opt === "string" ? opt : opt.value || opt.id) === value);
+    const match = safeOptions.find((opt) => (typeof opt === "string" ? opt : opt.value || opt.id) === value);
     if (match) return typeof match === "string" ? match : match.label || match.name || value;
     return value;
   })();
