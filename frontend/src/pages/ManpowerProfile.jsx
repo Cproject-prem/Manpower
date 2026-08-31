@@ -177,8 +177,17 @@ export default function ManpowerProfile() {
 
   const linkUser = async () => {
     try {
-      await api.post(`/manpower/${m.id}/link-user`, { user_id: linkUserId });
-      toast.success("Linked to manpower user");
+      await api.post(`/manpower/${m.id}/link-user`, { user_id: linkUserId || null });
+      toast.success(linkUserId ? "Login linked successfully" : "Login unlinked");
+      setShowLink(false); setLinkUserId(""); load();
+    } catch (e) { toast.error(formatApiError(e)); }
+  };
+
+  const unlinkUser = async () => {
+    if (!window.confirm("Unlink this login user from this manpower profile?")) return;
+    try {
+      await api.post(`/manpower/${m.id}/link-user`, { user_id: null });
+      toast.success("Login unlinked");
       setShowLink(false); setLinkUserId(""); load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
@@ -335,7 +344,15 @@ export default function ManpowerProfile() {
     } catch (e) { toast.error(formatApiError(e)); }
   };
 
-  const manpowerUsers = members.filter((u) => u.role === "manpower");
+  // Filter users for linking: must belong to the same contractor/company (matching m.contractor_id)
+  const linkableUsers = members.filter((u) => {
+    if (u.role !== "manpower" && u.role !== "member") return false;
+    if (m.contractor_id) {
+      return u.contractor_id === m.contractor_id;
+    }
+    return true;
+  });
+  const linkedUser = members.find((u) => u.id === m.user_id);
   const photoDoc = (m.documents || []).find((d) => d.doc_type === "photo");
   const isMember = user.role === "member";
   const isManpower = user.role === "manpower";
@@ -422,8 +439,16 @@ export default function ManpowerProfile() {
             </Button>
           )}
           {canLinkUser && (
-            <Button variant="outline" onClick={() => setShowLink(true)} data-testid="link-user-btn">
-              Link Login
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLinkUserId(m.user_id || "");
+                setShowLink(true);
+              }}
+              data-testid="link-user-btn"
+              className={m.user_id ? "border-emerald-300 text-emerald-700 bg-emerald-50/40" : ""}
+            >
+              {m.user_id ? `Linked: ${linkedUser?.name || "User"}` : "Link Login"}
             </Button>
           )}
           {m.status === "draft" && !m.manpower_id ? (
@@ -647,22 +672,55 @@ export default function ManpowerProfile() {
       {/* Link user dialog */}
       <Dialog open={showLink} onOpenChange={setShowLink}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Link Manpower Login</DialogTitle></DialogHeader>
-          <p className="text-sm text-zinc-600">Pick a manpower-role user to link to this record. The user will then see only this record.</p>
-          <select
-            value={linkUserId}
-            onChange={(e) => setLinkUserId(e.target.value)}
-            data-testid="link-user-select"
-            className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm"
-          >
-            <option value="">Select user…</option>
-            {manpowerUsers.map((u) => (
-              <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
-            ))}
-          </select>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowLink(false)}>Cancel</Button>
-            <Button onClick={linkUser} disabled={!linkUserId} className="bg-zinc-900 hover:bg-zinc-800 text-white" data-testid="confirm-link-user">Link</Button>
+          <DialogHeader><DialogTitle>Link Login Account</DialogTitle></DialogHeader>
+          <p className="text-sm text-zinc-600">
+            Pick a user account from <b>{contractor?.name || "the same contractor/company"}</b> to link to this manpower profile.
+          </p>
+          {m.user_id && linkedUser && (
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800 flex items-center justify-between">
+              <span>Currently linked: <b>{linkedUser.name}</b> ({linkedUser.email})</span>
+              <button
+                type="button"
+                onClick={unlinkUser}
+                className="text-xs text-rose-600 hover:underline font-medium ml-2"
+                data-testid="unlink-user-btn"
+              >
+                Unlink
+              </button>
+            </div>
+          )}
+          {linkableUsers.length === 0 ? (
+            <div className="p-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md">
+              No login users found for contractor <b>{contractor?.name || "this contractor"}</b>. Create a user under this contractor in Administration → Users first.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-xs text-zinc-700 font-medium">Select Member / User from {contractor?.name || "Contractor"}:</label>
+              <select
+                value={linkUserId}
+                onChange={(e) => setLinkUserId(e.target.value)}
+                data-testid="link-user-select"
+                className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
+              >
+                <option value="">— Select user from {contractor?.name || "contractor"} —</option>
+                {linkableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.email}) — {u.role === "member" ? "Member" : "Manpower"}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <DialogFooter className="flex justify-between items-center sm:justify-between">
+            {m.user_id ? (
+              <Button type="button" variant="outline" onClick={unlinkUser} className="text-rose-600 border-rose-200 hover:bg-rose-50">
+                Unlink
+              </Button>
+            ) : <span />}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowLink(false)}>Cancel</Button>
+              <Button onClick={linkUser} disabled={!linkUserId || linkableUsers.length === 0} className="bg-zinc-900 hover:bg-zinc-800 text-white" data-testid="confirm-link-user">Save Link</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

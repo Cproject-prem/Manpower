@@ -439,15 +439,30 @@ async def reassign(mid: str, payload: ReassignIn, current=Depends(require_roles(
 @router.post("/{mid}/link-user")
 async def link_user(mid: str, payload: dict, current=Depends(require_roles("super_admin", "admin", "vendor_admin"))):
     target_user_id = payload.get("user_id")
+    m = await db.manpower.find_one({"id": mid})
+    if not m:
+        raise HTTPException(status_code=404, detail="Manpower not found")
+
+    # Allow unlinking if user_id is empty/None
     if not target_user_id:
-        raise HTTPException(status_code=400, detail="user_id required")
-    target_user = await db.users.find_one({"id": target_user_id, "role": "manpower"})
+        await db.manpower.update_one({"id": mid}, {"$unset": {"user_id": ""}, "$set": {"updated_at": now_iso()}})
+        await audit(current, "manpower.unlink_user", mid)
+        return {"ok": True, "unlinked": True}
+
+    # Allow linking manpower or member users from the same contractor
+    target_user = await db.users.find_one({"id": target_user_id, "role": {"$in": ["manpower", "member"]}})
     if not target_user:
-        raise HTTPException(status_code=404, detail="Manpower user not found")
+        raise HTTPException(status_code=404, detail="User account not found")
+
+    # Verify same contractor / company
+    if m.get("contractor_id") and target_user.get("contractor_id"):
+        if target_user["contractor_id"] != m["contractor_id"]:
+            raise HTTPException(status_code=400, detail="User account belongs to a different contractor/company")
+
     res = await db.manpower.update_one({"id": mid}, {"$set": {"user_id": target_user_id, "updated_at": now_iso()}})
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Manpower not found")
-    await audit(current, "manpower.link_user", mid, {"user_id": target_user_id})
+    await audit(current, "manpower.link_user", mid, {"user_id": target_user_id, "user_email": target_user.get("email")})
     return {"ok": True}
 
 
