@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +6,7 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
 import SearchableCombobox from "@/components/ui/SearchableCombobox";
+import { api } from "@/lib/api";
 
 /**
  * Renders a single section's fields based on form-config field definitions.
@@ -17,6 +18,24 @@ import SearchableCombobox from "@/components/ui/SearchableCombobox";
  *  - disabledKeys: optional Set<string> for fields that must be readonly in this view
  */
 export default function DynamicFormFields({ section, values, onChange, context = {}, disabledKeys }) {
+  const [internalMaster, setInternalMaster] = useState(null);
+
+  // Safety net: if context.masterData is not passed or empty, fetch options directly
+  useEffect(() => {
+    if (!context.masterData || !context.masterData.all_locations || context.masterData.all_locations.length === 0) {
+      api.get("/master-data/options").then((r) => setInternalMaster(r.data)).catch(() => {});
+    }
+  }, [context.masterData]);
+
+  const activeMasterData = (context.masterData && context.masterData.all_locations && context.masterData.all_locations.length > 0)
+    ? context.masterData
+    : (internalMaster || { regions: [], states: [], locations: [], all_locations: [], all_states: [], location_map: {} });
+
+  const enrichedContext = {
+    ...context,
+    masterData: activeMasterData,
+  };
+
   return (
     <div>
       <div className="text-xs uppercase tracking-[0.12em] text-zinc-500 mb-3">{section.title}</div>
@@ -28,7 +47,7 @@ export default function DynamicFormFields({ section, values, onChange, context =
             value={values[f.key] ?? ""}
             values={values}
             onChange={onChange}
-            context={context}
+            context={enrichedContext}
             disabled={disabledKeys?.has(f.key)}
           />
         ))}
@@ -50,7 +69,7 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
   if (field.key === "location" || field.type === "location" || field.key === "site_name") {
     const locOptions = (masterData.all_locations && masterData.all_locations.length > 0)
       ? masterData.all_locations
-      : (masterData.locations || []);
+      : (masterData.locations && masterData.locations.length > 0 ? masterData.locations : []);
 
     const handleLocationChange = (val) => {
       onChange(field.key, val);
@@ -85,9 +104,20 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
 
   // 2. State (Residential / Address state) -> Filtered by selected Region
   if (field.key === "state") {
-    const stateOptions = (values.region && masterData.states && masterData.states.length > 0)
-      ? masterData.states
-      : (masterData.all_states && masterData.all_states.length > 0 ? masterData.all_states : masterData.states || []);
+    let stateOptions = [];
+    if (values.region && masterData.items && masterData.items.length > 0) {
+      const rx = values.region.trim().toLowerCase();
+      stateOptions = Array.from(new Set(
+        masterData.items
+          .filter((item) => item.region && item.region.trim().toLowerCase() === rx && item.state)
+          .map((item) => item.state.trim())
+      )).sort();
+    }
+    if (stateOptions.length === 0) {
+      stateOptions = (masterData.states && masterData.states.length > 0)
+        ? masterData.states
+        : (masterData.all_states && masterData.all_states.length > 0 ? masterData.all_states : []);
+    }
 
     return (
       <div className="space-y-1.5">
@@ -113,7 +143,7 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
   if (field.key === "work_state") {
     const workStateOptions = (masterData.all_states && masterData.all_states.length > 0)
       ? masterData.all_states
-      : (masterData.states || []);
+      : (masterData.states && masterData.states.length > 0 ? masterData.states : []);
 
     return (
       <div className="space-y-1.5">
@@ -137,7 +167,7 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
 
   // 4. Region dropdown
   if (field.key === "region" || field.type === "region") {
-    const regionOptions = masterData.regions || [];
+    const regionOptions = masterData.regions && masterData.regions.length > 0 ? masterData.regions : [];
     return (
       <div className="space-y-1.5">
         <Label className="text-xs text-zinc-700">

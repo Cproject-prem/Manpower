@@ -227,7 +227,7 @@ export default function NewRegistration() {
             section={section}
             values={displayValues}
             onChange={onChange}
-            context={{ contractors, members, clusterManagers, isAdmin, currentRole: user?.role }}
+            context={{ contractors, members, clusterManagers, masterData, isAdmin, currentRole: user?.role }}
             disabledKeys={contractorLocked ? new Set(["contractor_id", "company_name"]) : undefined}
           />
         ))}
