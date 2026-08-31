@@ -256,30 +256,32 @@ export default function ManpowerList() {
                 <td className="py-3 px-4 text-zinc-600">{memberName(m.assigned_member_id)}</td>
                 <td className="py-3 px-4 text-zinc-500 text-xs">{m.updated_at?.slice(0, 10)}</td>
                 <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                  {m.status === "draft" && !m.manpower_id ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
-                      title="Delete draft registration"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(m);
-                      }}
-                    >
-                      <Trash2 size={13} className="mr-1" /> Delete
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled
-                      className="h-7 px-2 text-zinc-300 text-xs cursor-not-allowed opacity-40"
-                      title="Delete disabled once ID is generated"
-                    >
-                      <Trash2 size={13} className="mr-1" /> Delete
-                    </Button>
-                  )}
+                  {m.status === "draft" ? (
+                    !m.manpower_id ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
+                        title="Delete draft registration"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(m);
+                        }}
+                      >
+                        <Trash2 size={13} className="mr-1" /> Delete
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled
+                        className="h-7 px-2 text-zinc-300 text-xs cursor-not-allowed opacity-40"
+                        title="Delete disabled once ID is generated"
+                      >
+                        <Trash2 size={13} className="mr-1" /> Delete
+                      </Button>
+                    )
+                  ) : null}
                 </td>
               </tr>
             ))}

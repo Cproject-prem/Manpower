@@ -451,25 +451,27 @@ export default function ManpowerProfile() {
               {m.user_id ? `Linked: ${linkedUser?.name || "User"}` : "Link Login"}
             </Button>
           )}
-          {m.status === "draft" && !m.manpower_id ? (
-            <Button
-              variant="outline"
-              onClick={deleteDraft}
-              data-testid="delete-draft-btn"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-            >
-              <Trash2 size={14} className="mr-1.5" /> Delete Draft
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              disabled
-              data-testid="delete-disabled-btn"
-              className="text-zinc-400 opacity-40 cursor-not-allowed"
-              title="Delete option is disabled once ID is generated"
-            >
-              <Trash2 size={14} className="mr-1.5" /> Delete (Disabled)
-            </Button>
+          {m.status === "draft" && (
+            !m.manpower_id ? (
+              <Button
+                variant="outline"
+                onClick={deleteDraft}
+                data-testid="delete-draft-btn"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+              >
+                <Trash2 size={14} className="mr-1.5" /> Delete Draft
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                disabled
+                data-testid="delete-disabled-btn"
+                className="text-zinc-400 opacity-40 cursor-not-allowed"
+                title="Delete option is disabled once ID is generated"
+              >
+                <Trash2 size={14} className="mr-1.5" /> Delete (Disabled)
+              </Button>
+            )
           )}
           {isAdmin && (
             <Button
