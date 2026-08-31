@@ -82,6 +82,17 @@ export default function ManpowerProfile() {
     }
   };
 
+  const deleteDraft = async () => {
+    if (!window.confirm("Are you sure you want to delete this draft manpower record? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/manpower/${m.id}`);
+      toast.success("Draft manpower deleted successfully");
+      navigate("/manpower");
+    } catch (e) {
+      toast.error(formatApiError(e));
+    }
+  };
+
   useEffect(() => {
     load();
     api.get("/contractors").then((r) => setContractors(r.data));
@@ -409,6 +420,26 @@ export default function ManpowerProfile() {
           {canLinkUser && (
             <Button variant="outline" onClick={() => setShowLink(true)} data-testid="link-user-btn">
               Link Login
+            </Button>
+          )}
+          {m.status === "draft" && !m.manpower_id ? (
+            <Button
+              variant="outline"
+              onClick={deleteDraft}
+              data-testid="delete-draft-btn"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            >
+              <Trash2 size={14} className="mr-1.5" /> Delete Draft
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              disabled
+              data-testid="delete-disabled-btn"
+              className="text-zinc-400 opacity-40 cursor-not-allowed"
+              title="Delete option is disabled once ID is generated"
+            >
+              <Trash2 size={14} className="mr-1.5" /> Delete (Disabled)
             </Button>
           )}
           {isAdmin && (

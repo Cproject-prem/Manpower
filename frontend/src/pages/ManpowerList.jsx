@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,17 @@ export default function ManpowerList() {
 
   const memberName = (id) => members.find((m) => m.id === id)?.name || id || "—";
   const contractorName = (id) => contractors.find((c) => c.id === id)?.name || "—";
+
+  const handleDelete = async (m) => {
+    if (!window.confirm(`Delete draft record for "${m.full_name || 'Draft'}"? This action cannot be undone.`)) return;
+    try {
+      await api.delete(`/manpower/${m.id}`);
+      toast.success("Draft manpower deleted successfully");
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Failed to delete draft");
+    }
+  };
 
   return (
     <div className="space-y-6" data-testid="manpower-list-page">
@@ -210,11 +222,12 @@ export default function ManpowerList() {
               <th className="text-left py-2 px-4 font-medium">Status</th>
               <th className="text-left py-2 px-4 font-medium">Member</th>
               <th className="text-left py-2 px-4 font-medium">Updated</th>
+              <th className="text-right py-2 px-4 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
-              <tr><td colSpan={10} className="text-center py-12 text-zinc-500">No manpower found.</td></tr>
+              <tr><td colSpan={12} className="text-center py-12 text-zinc-500">No manpower found.</td></tr>
             )}
             {items.map((m) => (
               <tr
@@ -242,6 +255,32 @@ export default function ManpowerList() {
                 <td className="py-3 px-4"><StatusBadge status={m.display_status} /></td>
                 <td className="py-3 px-4 text-zinc-600">{memberName(m.assigned_member_id)}</td>
                 <td className="py-3 px-4 text-zinc-500 text-xs">{m.updated_at?.slice(0, 10)}</td>
+                <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                  {m.status === "draft" && !m.manpower_id ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
+                      title="Delete draft registration"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(m);
+                      }}
+                    >
+                      <Trash2 size={13} className="mr-1" /> Delete
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled
+                      className="h-7 px-2 text-zinc-300 text-xs cursor-not-allowed opacity-40"
+                      title="Delete disabled once ID is generated"
+                    >
+                      <Trash2 size={13} className="mr-1" /> Delete
+                    </Button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

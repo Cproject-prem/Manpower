@@ -436,6 +436,41 @@ async def enable_manpower(mid: str, current=Depends(require_roles("super_admin",
     return {"ok": True}
 
 
+@router.delete("/{mid}")
+async def delete_manpower(mid: str, current=Depends(get_current_user)):
+    f = await filter_for_user(current)
+    f["id"] = mid
+    m = await db.manpower.find_one(f)
+    if not m:
+        raise HTTPException(status_code=404, detail="Manpower record not found")
+
+    # Strict requirement: Can only delete if it is in draft status AND manpower_id has not been generated
+    if m.get("manpower_id") or m.get("status") != "draft":
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete manpower once ID is generated or record is not in draft state"
+        )
+
+    # Delete any uploaded document files from disk
+    from app.config import UPLOAD_DIR
+    import os
+    for doc in m.get("documents", []) or []:
+        fp = doc.get("file_path")
+        if fp:
+            full_path = UPLOAD_DIR / fp
+            if full_path.exists():
+                try:
+                    os.remove(full_path)
+                except Exception:
+                    pass
+
+    await db.manpower.delete_one({"id": mid})
+    await audit(current, "manpower.delete", mid, {"full_name": m.get("full_name"), "status": "draft"})
+    return {"status": "ok", "message": "Draft manpower deleted successfully"}
+
+
+
+
 @router.post("/{mid}/renewal/submit")
 async def submit_renewal(mid: str, payload: RenewalSubmitIn, current=Depends(get_current_user)):
     f = await filter_for_user(current)
