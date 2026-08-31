@@ -22,48 +22,52 @@ async def get_master_data_options(
     region: Optional[str] = None,
     state: Optional[str] = None,
 ):
-    """Return distinct regions, states, and locations (sites) filtered by selected region/state."""
+    """Return distinct regions, states (filtered by region), all locations, and location-to-state mapping."""
     _ = current
-    query: dict = {}
-    if region and region.strip():
-        query["region"] = {"$regex": f"^{re.escape(region.strip())}$", "$options": "i"}
-    if state and state.strip():
-        query["state"] = {"$regex": f"^{re.escape(state.strip())}$", "$options": "i"}
 
-    # Fetch all matching locations
-    cursor = db.locations.find(query, {"_id": 0, "region": 1, "state": 1, "location": 1, "site_name": 1, "code": 1})
-    docs = await cursor.to_list(10000)
+    # Fetch all locations in database
+    all_docs = await db.locations.find({}, {"_id": 0, "region": 1, "state": 1, "location": 1, "site_name": 1, "code": 1}).to_list(10000)
 
-    # Distinct all regions from master db
-    all_regions = await db.locations.distinct("region")
-    all_regions = sorted([str(r).strip() for r in all_regions if r and str(r).strip()])
-
-    # If no locations in db yet, also fallback to regions in db.settings
+    # Distinct regions
+    all_regions = sorted(list(set([str(d.get("region")).strip() for d in all_docs if d.get("region") and str(d.get("region")).strip()])))
     if not all_regions:
         reg_doc = await db.settings.find_one({"key": "regions"}, {"_id": 0}) or {}
         all_regions = sorted([str(r).strip() for r in reg_doc.get("items", []) if r and str(r).strip()])
 
-    # Filtered distinct states and locations
-    states_set = set()
-    locations_set = set()
-    for d in docs:
-        st = d.get("state")
-        loc = d.get("location") or d.get("site_name")
-        if st and str(st).strip():
-            states_set.add(str(st).strip())
-        if loc and str(loc).strip():
-            locations_set.add(str(loc).strip())
+    # All distinct states & all locations across the entire master sheet
+    all_states = sorted(list(set([str(d.get("state")).strip() for d in all_docs if d.get("state") and str(d.get("state")).strip()])))
+    all_locations = sorted(list(set([str(d.get("location") or d.get("site_name")).strip() for d in all_docs if (d.get("location") or d.get("site_name")) and str(d.get("location") or d.get("site_name")).strip()])))
 
-    # If query had region filter, also collect distinct states globally for reference
-    all_states = await db.locations.distinct("state")
-    all_states = sorted([str(s).strip() for s in all_states if s and str(s).strip()])
+    # Location -> Details mapping for instant auto-filling of work_state
+    location_map = {}
+    for d in all_docs:
+        loc_name = str(d.get("location") or d.get("site_name") or "").strip()
+        if loc_name:
+            location_map[loc_name] = {
+                "state": str(d.get("state") or "").strip(),
+                "region": str(d.get("region") or "").strip(),
+                "code": str(d.get("code") or "").strip(),
+            }
+
+    # Region-filtered states (State alone is filtered by region)
+    region_states = []
+    if region and region.strip():
+        rx = region.strip().lower()
+        region_states = sorted(list(set([
+            str(d.get("state")).strip()
+            for d in all_docs
+            if d.get("region") and str(d.get("region")).strip().lower() == rx and d.get("state") and str(d.get("state")).strip()
+        ])))
 
     return {
         "regions": all_regions,
-        "states": sorted(list(states_set)) if (region or state) else all_states,
+        "states": region_states if (region and region_states) else all_states,
         "all_states": all_states,
-        "locations": sorted(list(locations_set)),
-        "total_locations": len(docs),
+        "locations": all_locations,
+        "all_locations": all_locations,
+        "location_map": location_map,
+        "items": all_docs,
+        "total_locations": len(all_docs),
     }
 
 

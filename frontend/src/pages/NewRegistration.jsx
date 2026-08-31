@@ -68,7 +68,7 @@ export default function NewRegistration() {
     // eslint-disable-next-line
   }, [user]);
 
-  // Auto-set company_name, filter assigned_member, and validate cluster_manager when region changes
+  // Auto-set company_name, filter assigned_member, validate cluster_manager, and auto-set work_state from location
   const onChange = (k, v) => {
     setValues((prev) => {
       const next = { ...prev, [k]: v };
@@ -79,6 +79,15 @@ export default function NewRegistration() {
           const currentMember = members.find((m) => m.id === prev.assigned_member_id);
           if (currentMember && currentMember.contractor_id && currentMember.contractor_id !== v) {
             next.assigned_member_id = "";
+          }
+        }
+      }
+      if (k === "location") {
+        // Automatically take work_state based on the selected Location (Site)
+        if (v && masterData.location_map && masterData.location_map[v]) {
+          const autoState = masterData.location_map[v].state;
+          if (autoState) {
+            next.work_state = autoState;
           }
         }
       }

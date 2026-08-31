@@ -863,9 +863,16 @@ export default function ManpowerProfile() {
               <Label className="text-xs text-zinc-700">Location (Site)</Label>
               <SearchableCombobox
                 value={editForm.location || ""}
-                onChange={(v) => setEditForm({ ...editForm, location: v })}
-                options={(masterData.locations || []).map((l) => (typeof l === "string" ? l : l.location || l.site_name || l))}
-                placeholder={editForm.region ? `Search site in ${editForm.region}...` : "Select or search site/location..."}
+                onChange={(v) => {
+                  const autoState = masterData.location_map?.[v]?.state;
+                  setEditForm({
+                    ...editForm,
+                    location: v,
+                    ...(autoState ? { work_state: autoState } : {}),
+                  });
+                }}
+                options={masterData.all_locations && masterData.all_locations.length > 0 ? masterData.all_locations : (masterData.locations || [])}
+                placeholder="Select or search site/location..."
                 searchPlaceholder="Type site name..."
                 testId="edit-location-combobox"
               />

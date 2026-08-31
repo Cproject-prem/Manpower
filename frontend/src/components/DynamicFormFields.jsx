@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,7 +6,6 @@ import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from "@/components/ui/select";
 import SearchableCombobox from "@/components/ui/SearchableCombobox";
-import { api } from "@/lib/api";
 
 /**
  * Renders a single section's fields based on form-config field definitions.
@@ -47,9 +46,23 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
   const testId = `field-${field.key}`;
   const isDisabled = disabled || field.readonly;
 
-  // Searchable dropdown for location (site)
+  // 1. Location (Site) -> Shows ALL locations from master sheet, and auto-fills work_state upon selection
   if (field.key === "location" || field.type === "location" || field.key === "site_name") {
-    const locOptions = (masterData.locations || []).map((l) => (typeof l === "string" ? l : l.location || l.site_name || l));
+    const locOptions = (masterData.all_locations && masterData.all_locations.length > 0)
+      ? masterData.all_locations
+      : (masterData.locations || []);
+
+    const handleLocationChange = (val) => {
+      onChange(field.key, val);
+      // Auto-set work_state based on selected Location (Site) from master data
+      if (val && masterData.location_map && masterData.location_map[val]) {
+        const autoState = masterData.location_map[val].state;
+        if (autoState) {
+          onChange("work_state", autoState);
+        }
+      }
+    };
+
     return (
       <div className="space-y-1.5">
         <Label className="text-xs text-zinc-700">
@@ -58,9 +71,9 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
         </Label>
         <SearchableCombobox
           value={value || ""}
-          onChange={(v) => onChange(field.key, v)}
+          onChange={handleLocationChange}
           options={locOptions}
-          placeholder={values.region ? `Search location in ${values.region}...` : "Select or search location/site..."}
+          placeholder="Select or search location/site..."
           searchPlaceholder="Type site/location name..."
           disabled={isDisabled}
           allowCustom={true}
@@ -70,11 +83,12 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
     );
   }
 
-  // Searchable dropdown for state and work_state
-  if (field.key === "state" || field.key === "work_state" || field.type === "state") {
-    const stateOptions = (masterData.states && masterData.states.length > 0)
+  // 2. State (Residential / Address state) -> Filtered by selected Region
+  if (field.key === "state") {
+    const stateOptions = (values.region && masterData.states && masterData.states.length > 0)
       ? masterData.states
-      : (masterData.all_states || []);
+      : (masterData.all_states && masterData.all_states.length > 0 ? masterData.all_states : masterData.states || []);
+
     return (
       <div className="space-y-1.5">
         <Label className="text-xs text-zinc-700">
@@ -95,7 +109,33 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
     );
   }
 
-  // Region dropdown
+  // 3. Work State -> All states (and automatically populated when Location is selected)
+  if (field.key === "work_state") {
+    const workStateOptions = (masterData.all_states && masterData.all_states.length > 0)
+      ? masterData.all_states
+      : (masterData.states || []);
+
+    return (
+      <div className="space-y-1.5">
+        <Label className="text-xs text-zinc-700">
+          {field.label}
+          {field.required && <span className="text-rose-600"> *</span>}
+        </Label>
+        <SearchableCombobox
+          value={value || ""}
+          onChange={(v) => onChange(field.key, v)}
+          options={workStateOptions}
+          placeholder="Auto-filled from Site / select state..."
+          searchPlaceholder="Type work state..."
+          disabled={isDisabled}
+          allowCustom={true}
+          testId={testId}
+        />
+      </div>
+    );
+  }
+
+  // 4. Region dropdown
   if (field.key === "region" || field.type === "region") {
     const regionOptions = masterData.regions || [];
     return (
