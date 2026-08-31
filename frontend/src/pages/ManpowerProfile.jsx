@@ -387,9 +387,10 @@ export default function ManpowerProfile() {
   const photoDoc = (m.documents || []).find((d) => d.doc_type === "photo");
   const isMember = user?.role === "member";
   const isManpower = user?.role === "manpower";
-  const canEditDetails = isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected"));
-  const canUploadInitial = uploadsEnabled && (isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected")));
-  const canLinkUser = isAdmin || user?.role === "vendor_admin";
+  const isVendorAdmin = user?.role === "vendor_admin";
+  const canEditDetails = isAdmin || isVendorAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected"));
+  const canUploadInitial = uploadsEnabled && (isAdmin || isVendorAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected")));
+  const canLinkUser = isAdmin || isVendorAdmin;
 
 
 
@@ -625,7 +626,7 @@ export default function ManpowerProfile() {
                       className="mt-2 text-xs"
                     />
                   )}
-                  {isAdmin && hasDoc && uploadsEnabled && (
+                  {(isAdmin || isVendorAdmin) && hasDoc && uploadsEnabled && (
                     <Input
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png"
