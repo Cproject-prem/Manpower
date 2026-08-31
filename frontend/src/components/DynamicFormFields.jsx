@@ -118,7 +118,7 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
           <SelectValue placeholder={clusterManagers.length === 0 ? "Select cluster manager" : "Select cluster manager"} />
         </SelectTrigger>
         <SelectContent>
-          {clusterManagers.map((cm) => (
+          {clusterManagers.filter((cm) => cm.role !== "super_admin").map((cm) => (
             <SelectItem key={cm.id || cm.name} value={cm.name}>
               {cm.name}{cm.region ? ` (${cm.region})` : ""}
             </SelectItem>

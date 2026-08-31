@@ -103,8 +103,8 @@ export default function ManpowerProfile() {
     if (user?.role === "super_admin" || user?.role === "admin" || user?.role === "vendor_admin") {
       api.get("/users").then((r) => setMembers(r.data));
     }
-    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data)).catch(() => {
-      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "super_admin" || u.role === "admin"))).catch(() => {});
+    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data.filter((u) => u.role !== "super_admin"))).catch(() => {
+      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "admin"))).catch(() => {});
     });
     // eslint-disable-next-line
   }, [id]);
@@ -748,7 +748,7 @@ export default function ManpowerProfile() {
                 className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
               >
                 <option value="">— Select cluster manager —</option>
-                {clusterManagers.map((cm) => (
+                {clusterManagers.filter((cm) => cm.role !== "super_admin").map((cm) => (
                   <option key={cm.id || cm.name} value={cm.name}>
                     {cm.name}{cm.region ? ` (${cm.region})` : ""}
                   </option>

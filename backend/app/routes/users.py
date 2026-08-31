@@ -15,7 +15,7 @@ async def list_cluster_managers(current=Depends(get_current_user)):
     """Return all active Admin and Super Admin users to populate Cluster Manager dropdowns."""
     _ = current
     admins = await db.users.find(
-        {"role": {"$in": ["super_admin", "admin"]}, "disabled": {"$ne": True}},
+        {"role": "admin", "disabled": {"$ne": True}},
         {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "region": 1, "region_scope": 1}
     ).to_list(500)
     return admins

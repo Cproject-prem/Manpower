@@ -56,8 +56,8 @@ export default function NewRegistration() {
     if (isAdmin || isVendorAdmin) {
       api.get("/users").then((r) => setMembers(r.data.filter((u) => u.role === "member")));
     }
-    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data)).catch(() => {
-      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "super_admin" || u.role === "admin"))).catch(() => {});
+    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data.filter((u) => u.role !== "super_admin"))).catch(() => {
+      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "admin"))).catch(() => {});
     });
     api.get("/settings/regions").then((r) => setRegions(r.data.regions || [])).catch(() => setRegions([]));
     // eslint-disable-next-line
