@@ -103,9 +103,10 @@ class SettingsIn(BaseModel):
 
 
 class FormFieldIn(BaseModel):
+    model_config = ConfigDict(extra="allow")
     key: str
     label: str
-    type: Literal["text", "email", "tel", "date", "number", "textarea", "select", "contractor", "member", "document"]
+    type: str  # Allows 'cluster_manager', 'select', 'text', 'location', 'region', 'member', 'contractor', 'date', etc.
     required: Optional[bool] = False
     options: Optional[List[str]] = None
     system: Optional[bool] = False

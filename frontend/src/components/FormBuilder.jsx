@@ -115,9 +115,11 @@ export default function FormBuilder({ formKey, title, hideAddSection = false }) 
       };
     });
 
-    update({ ...config, sections: nextSections });
+    const nextConfig = { ...config, sections: nextSections };
+    update(nextConfig);
     setEditingTarget(null);
-    toast.success(`Field "${label}" updated in draft. Click "Save Changes" to persist.`);
+    // Directly persist to database so changes are never lost on refresh
+    saveDirectly(nextConfig, `Field "${label}" updated and saved successfully.`);
   };
 
   const addField = () => {
@@ -193,19 +195,24 @@ export default function FormBuilder({ formKey, title, hideAddSection = false }) 
     update({ ...config, sections: config.sections.filter((_, i) => i !== si) });
   };
 
-  const save = async () => {
+  const saveDirectly = async (cfgToSave, successMsg) => {
     setSaving(true);
     try {
-      const payload = { sections: config.sections };
+      const payload = { sections: cfgToSave.sections };
       const { data } = await api.put(`/form-configs/${formKey}`, payload);
       setConfig(data);
       setDirty(false);
-      toast.success("Form configuration saved successfully");
+      toast.success(successMsg || "Form configuration saved successfully");
     } catch (e) {
       toast.error(formatApiError(e));
     } finally {
       setSaving(false);
     }
+  };
+
+  const save = async () => {
+    if (!config) return;
+    await saveDirectly(config, "Form configuration saved successfully");
   };
 
   const resetDefaults = async () => {
