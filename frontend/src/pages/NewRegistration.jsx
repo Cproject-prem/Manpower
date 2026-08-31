@@ -63,7 +63,7 @@ export default function NewRegistration() {
     // eslint-disable-next-line
   }, [user]);
 
-  // Auto-set company_name and filter assigned_member when contractor changes
+  // Auto-set company_name, filter assigned_member, and validate cluster_manager when region changes
   const onChange = (k, v) => {
     setValues((prev) => {
       const next = { ...prev, [k]: v };
@@ -74,6 +74,15 @@ export default function NewRegistration() {
           const currentMember = members.find((m) => m.id === prev.assigned_member_id);
           if (currentMember && currentMember.contractor_id && currentMember.contractor_id !== v) {
             next.assigned_member_id = "";
+          }
+        }
+      }
+      if (k === "region") {
+        if (prev.reporting_cluster_manager) {
+          const currentCm = clusterManagers.find((cm) => cm.name === prev.reporting_cluster_manager);
+          if (currentCm && currentCm.region && v && currentCm.region.toLowerCase() !== v.toLowerCase()) {
+            // Reset cluster manager if it belongs to a different region
+            next.reporting_cluster_manager = "";
           }
         }
       }

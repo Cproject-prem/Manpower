@@ -748,11 +748,21 @@ export default function ManpowerProfile() {
                 className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
               >
                 <option value="">— Select cluster manager —</option>
-                {clusterManagers.filter((cm) => cm.role !== "super_admin").map((cm) => (
-                  <option key={cm.id || cm.name} value={cm.name}>
-                    {cm.name}{cm.region ? ` (${cm.region})` : ""}
-                  </option>
-                ))}
+                {clusterManagers
+                  .filter((cm) => {
+                    if (cm.role === "super_admin") return false;
+                    if (!editForm.region) return true;
+                    if (cm.region && cm.region.toLowerCase() === editForm.region.toLowerCase()) return true;
+                    if (Array.isArray(cm.region_scope) && cm.region_scope.length > 0) {
+                      return cm.region_scope.some((r) => r.toLowerCase() === editForm.region.toLowerCase());
+                    }
+                    return !cm.region && (!cm.region_scope || cm.region_scope.length === 0);
+                  })
+                  .map((cm) => (
+                    <option key={cm.id || cm.name} value={cm.name}>
+                      {cm.name}{cm.region ? ` (${cm.region})` : ""}
+                    </option>
+                  ))}
               </select>
             </div>
             <EditField k="work_state" label="Work State" form={editForm} setForm={setEditForm} />

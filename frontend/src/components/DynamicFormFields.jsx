@@ -107,7 +107,18 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
       </Select>
     );
   } else if (field.type === "cluster_manager" || field.key === "reporting_cluster_manager" || field.key === "cluster_manager") {
-    // Dropdown menu populated from users with Admin Access
+    // If region is selected, filter to only that region's admins (or unrestricted admins)
+    const selectedRegion = values?.region;
+    const filteredAdmins = clusterManagers.filter((cm) => {
+      if (cm.role === "super_admin") return false;
+      if (!selectedRegion) return true;
+      if (cm.region && cm.region.toLowerCase() === selectedRegion.toLowerCase()) return true;
+      if (Array.isArray(cm.region_scope) && cm.region_scope.length > 0) {
+        return cm.region_scope.some((r) => r.toLowerCase() === selectedRegion.toLowerCase());
+      }
+      return !cm.region && (!cm.region_scope || cm.region_scope.length === 0);
+    });
+
     control = (
       <Select
         value={value || ""}
@@ -115,10 +126,10 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
         disabled={isDisabled}
       >
         <SelectTrigger data-testid={testId}>
-          <SelectValue placeholder={clusterManagers.length === 0 ? "Select cluster manager" : "Select cluster manager"} />
+          <SelectValue placeholder={!selectedRegion ? "Select cluster manager" : filteredAdmins.length === 0 ? `No admin for ${selectedRegion} region` : "Select cluster manager"} />
         </SelectTrigger>
         <SelectContent>
-          {clusterManagers.filter((cm) => cm.role !== "super_admin").map((cm) => (
+          {filteredAdmins.map((cm) => (
             <SelectItem key={cm.id || cm.name} value={cm.name}>
               {cm.name}{cm.region ? ` (${cm.region})` : ""}
             </SelectItem>
