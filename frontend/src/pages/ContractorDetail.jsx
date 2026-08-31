@@ -82,6 +82,20 @@ export default function ContractorDetail() {
   const updateField = (k, v) => setValues((prev) => ({ ...prev, [k]: v }));
 
   const saveMetadata = async () => {
+    // Validate dynamic required fields configured in form builder
+    if (config?.sections) {
+      for (const sec of config.sections) {
+        for (const f of sec.fields || []) {
+          if (f.required && !f.readonly && f.type !== "document") {
+            const val = values[f.key];
+            if (val === undefined || val === null || (typeof val === "string" && !val.trim())) {
+              toast.error(`${f.label || f.key} is required`);
+              return;
+            }
+          }
+        }
+      }
+    }
     setSaving(true);
     try {
       const { data } = await api.put(`/contractors/${id}/compliance`, { compliance: values });

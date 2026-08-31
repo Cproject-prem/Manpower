@@ -47,7 +47,23 @@ export default function Contractors() {
   const onChange = (k, v) => setValues((p) => ({ ...p, [k]: v }));
 
   const create = async () => {
-    if (!values.name) { toast.error("Name is required"); return; }
+    // Validate dynamic required fields configured in form builder
+    if (config?.sections) {
+      for (const sec of config.sections) {
+        for (const f of sec.fields || []) {
+          if (f.required && !f.readonly && f.type !== "document") {
+            const val = values[f.key];
+            if (val === undefined || val === null || (typeof val === "string" && !val.trim())) {
+              toast.error(`${f.label || f.key} is required`);
+              return;
+            }
+          }
+        }
+      }
+    } else if (!values.name) {
+      toast.error("Name is required");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {};
