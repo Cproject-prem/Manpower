@@ -113,7 +113,10 @@ export default function ManpowerProfile() {
 
   const isAdmin = user.role === "super_admin" || user.role === "admin";
   const contractor = contractors.find((c) => c.id === m.contractor_id);
-  const memberName = members.find((u) => u.id === m.assigned_member_id)?.name || "—";
+  const memberObj = members.find((u) => u.id === m.assigned_member_id)
+    || members.find((u) => u.id === m.created_by && u.role === "member")
+    || (m.user_id ? members.find((u) => u.id === m.user_id && u.role === "member") : null);
+  const memberName = memberObj?.name || memberObj?.email || m.assigned_member_id || "—";
 
   const upload = async (docType, file) => {
     if (!file) return;
@@ -197,6 +200,7 @@ export default function ManpowerProfile() {
     // Flatten extra_fields into form for editing
     const flat = { ...editable, ...(editable.extra_fields || {}) };
     delete flat.extra_fields;
+    flat.assigned_member_id = m.assigned_member_id || "";
     setEditForm(flat);
     setShowEdit(true);
   };
@@ -219,6 +223,9 @@ export default function ManpowerProfile() {
         payload[k] = v;
         if (!nativeKeys.has(k)) extra[k] = v;
       });
+      if (editForm.assigned_member_id !== undefined) {
+        payload.assigned_member_id = editForm.assigned_member_id || null;
+      }
       if (Object.keys(extra).length > 0) payload.extra_fields = extra;
       await api.put(`/manpower/${m.id}`, payload);
       toast.success("Updated");
@@ -778,7 +785,7 @@ export default function ManpowerProfile() {
                 {(regions || []).map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
-            <div className="space-y-1.5 col-span-1 sm:col-span-2">
+            <div className="space-y-1.5">
               <Label className="text-xs text-zinc-700">Contractor (also sets Company Name)</Label>
               <select
                 value={editForm.contractor_id || ""}
@@ -788,10 +795,28 @@ export default function ManpowerProfile() {
                   setEditForm({ ...editForm, contractor_id: cid, company_name: cname });
                 }}
                 data-testid="edit-contractor_id"
-                className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm"
+                className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
               >
                 <option value="">Select contractor…</option>
                 {contractors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-700">Assigned Member</Label>
+              <select
+                value={editForm.assigned_member_id || ""}
+                onChange={(e) => setEditForm({ ...editForm, assigned_member_id: e.target.value })}
+                data-testid="edit-assigned-member"
+                className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
+              >
+                <option value="">— Unassigned / Select Member —</option>
+                {members
+                  .filter((u) => u.role === "member" && (!editForm.contractor_id || u.contractor_id === editForm.contractor_id))
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.email})
+                    </option>
+                  ))}
               </select>
             </div>
             <EditField k="street_address" label="Street Address" form={editForm} setForm={setEditForm} />

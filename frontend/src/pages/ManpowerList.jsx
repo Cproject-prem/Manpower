@@ -81,7 +81,15 @@ export default function ManpowerList() {
     // eslint-disable-next-line
   }, [columnFilters]);
 
-  const memberName = (id) => members.find((m) => m.id === id)?.name || id || "—";
+  const memberName = (id, row) => {
+    const found = members.find((m) => m.id === id);
+    if (found) return found.name;
+    if (row?.user_id) {
+      const linked = members.find((m) => m.id === row.user_id);
+      if (linked) return linked.name;
+    }
+    return id || "—";
+  };
   const contractorName = (id) => contractors.find((c) => c.id === id)?.name || "—";
 
   const handleDelete = async (m) => {
@@ -253,7 +261,7 @@ export default function ManpowerList() {
                 <td className="py-3 px-4 text-zinc-600">{m.medical_expiry_date || "—"}</td>
                 <td className="py-3 px-4"><StatusBadge status={m.document_status} /></td>
                 <td className="py-3 px-4"><StatusBadge status={m.display_status} /></td>
-                <td className="py-3 px-4 text-zinc-600">{memberName(m.assigned_member_id)}</td>
+                <td className="py-3 px-4 text-zinc-600">{memberName(m.assigned_member_id, m)}</td>
                 <td className="py-3 px-4 text-zinc-500 text-xs">{m.updated_at?.slice(0, 10)}</td>
                 <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                   {m.status === "draft" ? (
