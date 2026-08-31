@@ -108,10 +108,29 @@ export default function ManpowerProfile() {
     api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data.filter((u) => u.role !== "super_admin"))).catch(() => {
       api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "admin"))).catch(() => {});
     });
+    api.get("/master-data/options").then((r) => setMasterData(r.data)).catch(() => {});
     // eslint-disable-next-line
   }, [id]);
 
-  if (!m) return <div className="text-zinc-500">Loading…</div>;
+  // Re-fetch master data options when editing region changes
+  useEffect(() => {
+    if (showEdit) {
+      const params = {};
+      if (editForm.region) params.region = editForm.region;
+      api.get("/master-data/options", { params }).then((r) => setMasterData(r.data)).catch(() => {});
+    }
+  }, [showEdit, editForm.region]);
+
+  if (!m) {
+    return (
+      <div className="p-12 text-center text-zinc-500 flex items-center justify-center gap-2">
+        <div className="w-5 h-5 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm font-medium">Loading manpower details...</span>
+      </div>
+    );
+  }
+
+
 
   const isAdmin = user.role === "super_admin" || user.role === "admin";
   const contractor = contractors.find((c) => c.id === m.contractor_id);
@@ -198,14 +217,7 @@ export default function ManpowerProfile() {
   };
 
 
-  // Re-fetch master data options when editing region changes
-  useEffect(() => {
-    if (showEdit) {
-      const params = {};
-      if (editForm.region) params.region = editForm.region;
-      api.get("/master-data/options", { params }).then((r) => setMasterData(r.data)).catch(() => {});
-    }
-  }, [showEdit, editForm.region]);
+
 
   const openEdit = () => {
     const { id: _id, documents, approval_history, renewal_history, admin_comments, status, manpower_id, display_status, document_status, ...editable } = m;
@@ -378,6 +390,8 @@ export default function ManpowerProfile() {
   const canEditDetails = isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected"));
   const canUploadInitial = uploadsEnabled && (isAdmin || ((isMember || isManpower) && (m.status === "draft" || m.status === "rejected")));
   const canLinkUser = isAdmin || user.role === "vendor_admin";
+
+
 
   return (
     <div className="space-y-6" data-testid="manpower-profile-page">
