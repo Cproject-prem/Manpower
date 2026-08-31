@@ -132,18 +132,45 @@ async def upload_master_excel(
     if df.empty:
         raise HTTPException(status_code=400, detail="The uploaded file contains no rows")
 
-    # Normalize column names
+    # Normalize column names accurately (prevent 'Site Code' from matching 'Site/Location')
     col_map = {}
+
+    # 1. First detect Code column (e.g. 'Site Code', 'Code', 'Site ID')
+    for col in df.columns:
+        c_clean = str(col).strip().lower()
+        if any(k in c_clean for k in ("code", "site_id", "plant_id", "site code", "site-code")):
+            col_map["code"] = col
+            break
+
+    # 2. Detect Region column (e.g. 'Region', 'Zone')
     for col in df.columns:
         c_clean = str(col).strip().lower()
         if any(k in c_clean for k in ("region", "zone")):
             col_map["region"] = col
-        elif any(k in c_clean for k in ("state", "province")):
+            break
+
+    # 3. Detect State column (e.g. 'State', 'Province')
+    for col in df.columns:
+        c_clean = str(col).strip().lower()
+        if any(k in c_clean for k in ("state", "province")):
             col_map["state"] = col
-        elif any(k in c_clean for k in ("location", "site", "plant")):
+            break
+
+    # 4. Detect Location/Site column (must not be code/region/state)
+    for col in df.columns:
+        if col in (col_map.get("code"), col_map.get("region"), col_map.get("state")):
+            continue
+        c_clean = str(col).strip().lower()
+        if any(k in c_clean for k in ("location", "site", "plant", "place", "site name", "site_name", "location (site)")):
             col_map["location"] = col
-        elif any(k in c_clean for k in ("code", "site_id", "plant_id")):
-            col_map["code"] = col
+            break
+
+    # Fallback for location if not matched yet: first unused column
+    if "location" not in col_map:
+        for col in df.columns:
+            if col not in col_map.values():
+                col_map["location"] = col
+                break
 
     if "location" not in col_map and "state" not in col_map:
         raise HTTPException(
