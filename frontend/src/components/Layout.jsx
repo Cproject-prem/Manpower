@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users as UsersIcon, FilePlus, RefreshCcw, FileText,
-  BarChart3, ShieldCheck, Settings as SettingsIcon, Bell, LogOut, Building2, ClipboardList, Menu, X as XIcon,
+  BarChart3, ShieldCheck, Settings as SettingsIcon, Bell, LogOut, Building2, ClipboardList, Menu, X as XIcon, Database,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
@@ -22,6 +22,7 @@ const NAV = [
   { to: "/vendor-evaluations", label: "Vendor Evaluations", icon: ClipboardList, roles: ["super_admin", "admin", "vendor_admin"] },
   { to: "/reports", label: "Workforce Deployment", icon: BarChart3, roles: ["super_admin", "admin", "vendor_admin", "member"] },
   { to: "/users", label: "Users", icon: ShieldCheck, roles: ["super_admin", "admin", "vendor_admin", "member"] },
+  { to: "/master-data", label: "Master Data (Sites)", icon: Database, roles: ["super_admin", "admin"] },
   { to: "/settings", label: "Settings", icon: SettingsIcon, roles: ["super_admin", "admin"] },
 ];
 

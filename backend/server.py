@@ -20,7 +20,7 @@ from app.db import client
 from app.startup import run_startup
 from app.routes import (
     audit_logs, auth, backup, contractors, documents, form_configs,
-    manpower, notifications, reports, settings, users, vendor_evaluations,
+    manpower, master_data, notifications, reports, settings, users, vendor_evaluations,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -40,6 +40,7 @@ api.include_router(settings.router)
 api.include_router(audit_logs.router)
 api.include_router(form_configs.router)
 api.include_router(vendor_evaluations.router)
+api.include_router(master_data.router)
 api.include_router(backup.router)
 app.include_router(api)
 

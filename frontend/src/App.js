@@ -14,6 +14,7 @@ import Documents from "@/pages/Documents";
 import Reports from "@/pages/Reports";
 import Users from "@/pages/Users";
 import Settings from "@/pages/Settings";
+import MasterData from "@/pages/MasterData";
 import Contractors from "@/pages/Contractors";
 import ContractorDetail from "@/pages/ContractorDetail";
 import VendorEvaluations from "@/pages/VendorEvaluations";
@@ -86,6 +87,14 @@ function App() {
               element={
                 <ProtectedRoute roles={["super_admin", "admin", "vendor_admin", "member"]}>
                   <Users />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/master-data"
+              element={
+                <ProtectedRoute roles={["super_admin", "admin"]}>
+                  <MasterData />
                 </ProtectedRoute>
               }
             />

@@ -25,6 +25,7 @@ export default function NewRegistration() {
   const [members, setMembers] = useState([]);
   const [clusterManagers, setClusterManagers] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [masterData, setMasterData] = useState({ regions: [], states: [], locations: [], all_states: [] });
   const [values, setValues] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -60,6 +61,10 @@ export default function NewRegistration() {
       api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "admin"))).catch(() => {});
     });
     api.get("/settings/regions").then((r) => setRegions(r.data.regions || [])).catch(() => setRegions([]));
+    api.get("/master-data/options").then((r) => {
+      setMasterData(r.data);
+      if (r.data.regions && r.data.regions.length > 0) setRegions(r.data.regions);
+    }).catch(() => {});
     // eslint-disable-next-line
   }, [user]);
 
@@ -89,6 +94,16 @@ export default function NewRegistration() {
       return next;
     });
   };
+
+
+  // Re-fetch master data options filtered when region changes
+  useEffect(() => {
+    const params = {};
+    if (values.region) params.region = values.region;
+    api.get("/master-data/options", { params }).then((r) => {
+      setMasterData(r.data);
+    }).catch(() => {});
+  }, [values.region]);
 
   const companyName = useMemo(() => contractors.find((c) => c.id === values.contractor_id)?.name || "", [contractors, values.contractor_id]);
 

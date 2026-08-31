@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import SearchableCombobox from "@/components/ui/SearchableCombobox";
 import StatusBadge from "@/components/StatusBadge";
 import ManpowerPrintView from "@/components/ManpowerPrintView";
 
@@ -49,6 +50,7 @@ export default function ManpowerProfile() {
   const [viewerDoc, setViewerDoc] = useState(null);
   const [members, setMembers] = useState([]);
   const [clusterManagers, setClusterManagers] = useState([]);
+  const [masterData, setMasterData] = useState({ regions: [], states: [], locations: [], all_states: [] });
   const [comment, setComment] = useState("");
   const [showApprove, setShowApprove] = useState(false);
   const [showReject, setShowReject] = useState(false);
@@ -194,6 +196,16 @@ export default function ManpowerProfile() {
       setShowLink(false); setLinkUserId(""); load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
+
+
+  // Re-fetch master data options when editing region changes
+  useEffect(() => {
+    if (showEdit) {
+      const params = {};
+      if (editForm.region) params.region = editForm.region;
+      api.get("/master-data/options", { params }).then((r) => setMasterData(r.data)).catch(() => {});
+    }
+  }, [showEdit, editForm.region]);
 
   const openEdit = () => {
     const { id: _id, documents, approval_history, renewal_history, admin_comments, status, manpower_id, display_status, document_status, ...editable } = m;
@@ -821,9 +833,40 @@ export default function ManpowerProfile() {
             </div>
             <EditField k="street_address" label="Street Address" form={editForm} setForm={setEditForm} />
             <EditField k="city" label="City" form={editForm} setForm={setEditForm} />
-            <EditField k="state" label="State" form={editForm} setForm={setEditForm} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-700">State</Label>
+              <SearchableCombobox
+                value={editForm.state || ""}
+                onChange={(v) => setEditForm({ ...editForm, state: v })}
+                options={masterData.states && masterData.states.length > 0 ? masterData.states : (masterData.all_states || [])}
+                placeholder={editForm.region ? `Search state in ${editForm.region}...` : "Select or search state..."}
+                searchPlaceholder="Type state..."
+                testId="edit-state-combobox"
+              />
+            </div>
             <EditField k="postal_code" label="Postal Code" form={editForm} setForm={setEditForm} />
-            <EditField k="location" label="Location" form={editForm} setForm={setEditForm} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-700">Location (Site)</Label>
+              <SearchableCombobox
+                value={editForm.location || ""}
+                onChange={(v) => setEditForm({ ...editForm, location: v })}
+                options={(masterData.locations || []).map((l) => (typeof l === "string" ? l : l.location || l.site_name || l))}
+                placeholder={editForm.region ? `Search site in ${editForm.region}...` : "Select or search site/location..."}
+                searchPlaceholder="Type site name..."
+                testId="edit-location-combobox"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-700">Work State</Label>
+              <SearchableCombobox
+                value={editForm.work_state || ""}
+                onChange={(v) => setEditForm({ ...editForm, work_state: v })}
+                options={masterData.states && masterData.states.length > 0 ? masterData.states : (masterData.all_states || [])}
+                placeholder={editForm.region ? `Search work state in ${editForm.region}...` : "Select or search work state..."}
+                searchPlaceholder="Type work state..."
+                testId="edit-work-state-combobox"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-zinc-700">Cluster Manager</Label>
               <select
