@@ -50,16 +50,19 @@ EVENT_LABELS = {
 
 DEFAULT_TEMPLATES = {
     "manpower_submitted": {
-        "subject": "[CMES] New Submission: {{ manpower_name }} ({{ manpower_id_display }})",
+        "subject": "[CMES] New Submission: {{ manpower_name }} ({{ manpower_id_display }}) - {{ region or 'Pending Approval' }}",
         "body": (
             "<p>A new manpower application has been submitted and is pending approval.</p>"
             "<ul>"
             "<li><b>Name:</b> {{ manpower_name }}</li>"
             "<li><b>Manpower ID:</b> {{ manpower_id_display }}</li>"
+            "<li><b>Region:</b> {{ region or 'Unassigned' }}</li>"
+            "<li><b>Cluster Manager:</b> {{ cluster_manager or '—' }}</li>"
             "<li><b>Contractor:</b> {{ contractor }}</li>"
             "<li><b>Submitted by:</b> {{ actor_email }}</li>"
             "<li><b>Status:</b> {{ status }}</li>"
             "</ul>"
+            "<p>Any Admin from the same region can review and approve this application.</p>"
             "<p>Please review at <a href=\"{{ portal_url }}\">the portal</a>.</p>"
         ),
     },
@@ -200,8 +203,13 @@ async def get_email_settings() -> dict:
     return merged
 
 
-async def _resolve_recipients(cfg: dict, manpower: Optional[dict]) -> list[str]:
-    """Build unique recipient list: extra + creator/member.email + manpower_user.email + reporting_manager."""
+async def _resolve_recipients(cfg: dict, manpower: Optional[dict], event: Optional[str] = None) -> list[str]:
+    """Build unique recipient list:
+    - For approval events: respective Cluster Manager email + all Admins from the same region.
+    - Submitter / member / manpower emails as configured.
+    - Extra configured recipients.
+    """
+    import re
     recipients: list[str] = []
 
     for e in cfg.get("extra_recipients") or []:
@@ -209,9 +217,40 @@ async def _resolve_recipients(cfg: dict, manpower: Optional[dict]) -> list[str]:
             recipients.append(e.strip())
 
     if manpower:
-        # Submitter / creator / assigned member email
-        # "Include Member (creator) email" covers BOTH `created_by` (who submitted)
-        # and `assigned_member_id` (who admin assigned) — either or both may be set.
+        # 1. Respective Cluster Manager Email
+        cm_val = (
+            manpower.get("reporting_cluster_manager")
+            or (manpower.get("extra_fields") or {}).get("reporting_cluster_manager")
+        )
+        if cm_val and isinstance(cm_val, str) and cm_val.strip():
+            cm_str = cm_val.strip()
+            cm_user = await db.users.find_one({
+                "$or": [
+                    {"name": {"$regex": f"^{re.escape(cm_str)}$", "$options": "i"}},
+                    {"email": cm_str.lower()},
+                    {"id": cm_str},
+                ],
+                "disabled": {"$ne": True},
+            }, {"email": 1})
+            if cm_user and cm_user.get("email"):
+                recipients.append(cm_user["email"])
+
+        # 2. All Admins from the same region (and unrestricted admins) for submission/approval events
+        mp_region = manpower.get("region")
+        if event in ("manpower_submitted", "renewal_submitted"):
+            admin_query = {"role": "admin", "disabled": {"$ne": True}}
+            if mp_region:
+                admin_query["$or"] = [
+                    {"region": mp_region},
+                    {"region_scope": mp_region},
+                    {"region": {"$in": ["", None]}, "region_scope": {"$in": [[], None]}},
+                ]
+            region_admins = await db.users.find(admin_query, {"email": 1}).to_list(100)
+            for ra in region_admins:
+                if ra.get("email"):
+                    recipients.append(ra["email"])
+
+        # 3. Submitter / creator / assigned member email
         if cfg.get("include_member_email", True):
             for uid_field in ("created_by", "assigned_member_id"):
                 uid = manpower.get(uid_field)
@@ -220,14 +259,13 @@ async def _resolve_recipients(cfg: dict, manpower: Optional[dict]) -> list[str]:
                     if u and u.get("email"):
                         recipients.append(u["email"])
 
-        # Manpower own user email (if linked) OR reporting_manager_email fallback
+        # 4. Manpower own user email (if linked) OR reporting_manager_email fallback
         if cfg.get("include_manpower_email", True):
             uid = manpower.get("user_id")
             if uid:
                 mp_user = await db.users.find_one({"id": uid}, {"email": 1})
                 if mp_user and mp_user.get("email"):
                     recipients.append(mp_user["email"])
-            # Fallback: reporting_manager_email set on record itself
             rme = manpower.get("reporting_manager_email")
             if rme:
                 recipients.append(rme)
@@ -299,6 +337,8 @@ async def send_event_email(event: str, *, manpower: Optional[dict] = None, actor
         "actor_email": (actor or {}).get("email", "system"),
         "actor_name": (actor or {}).get("name", ""),
         "actor_role": (actor or {}).get("role", ""),
+        "cluster_manager": (manpower or {}).get("reporting_cluster_manager", ""),
+        "region": (manpower or {}).get("region", ""),
         "admin_comments": "",
         "doc_type": "",
         "new_expiry": "",
@@ -310,7 +350,7 @@ async def send_event_email(event: str, *, manpower: Optional[dict] = None, actor
     if extra_ctx:
         ctx.update(extra_ctx)
 
-    recipients = await _resolve_recipients(cfg, manpower)
+    recipients = await _resolve_recipients(cfg, manpower, event)
     if not recipients:
         return
 

@@ -38,19 +38,22 @@ async def audit(user: dict, action: str, target: str = "", details: Optional[dic
 def check_region_scope(user: dict, target_region: Optional[str]):
     """Enforce region scope permission for admins during approval / management actions.
     - super_admin: allowed everywhere.
-    - admin: if `region_scope` is set (non-empty list), `target_region` MUST be in `region_scope`.
+    - admin: any admin from the same region (matching `region` or `region_scope`) can approve/manage.
+      If admin has no region scope set (unrestricted), allowed everywhere.
     """
     if user.get("role") == "super_admin":
         return
     if user.get("role") == "admin":
         scope = user.get("region_scope") or []
+        if not scope and user.get("region"):
+            scope = [user["region"]]
         if scope:
             if not target_region or target_region not in scope:
                 scope_str = ", ".join(scope)
                 reg_str = f"'{target_region}'" if target_region else "unassigned region"
                 raise HTTPException(
                     status_code=403,
-                    detail=f"Access denied: Record in region {reg_str} is outside your assigned region scope ({scope_str})."
+                    detail=f"Access denied: Record in region {reg_str} is outside your assigned region ({scope_str})."
                 )
 
 
@@ -143,6 +146,8 @@ async def filter_for_user(user: dict) -> dict:
         return {}
     if user["role"] == "admin":
         scope = user.get("region_scope") or []
+        if not scope and user.get("region"):
+            scope = [user["region"]]
         return {"region": {"$in": scope}} if scope else {}
     if user["role"] == "vendor_admin":
         cid = user.get("contractor_id")

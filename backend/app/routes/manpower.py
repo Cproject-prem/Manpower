@@ -330,8 +330,41 @@ async def submit_manpower(mid: str, current=Depends(get_current_user)):
     if m["status"] not in ("draft", "rejected"):
         raise HTTPException(status_code=400, detail="Can only submit drafts or rejected")
     await db.manpower.update_one({"id": mid}, {"$set": {"status": "pending_approval", "updated_at": now_iso()}})
-    admins = await db.users.find({"role": {"$in": ["admin", "super_admin"]}}, {"id": 1}).to_list(100)
-    await notify([a["id"] for a in admins], "New Application Submitted", f"{m['full_name']} application pending approval", f"/manpower/{mid}")
+    # Notify Cluster Manager + Admins from the same region + Super Admins
+    import re
+    notify_user_ids = set()
+    super_admins = await db.users.find({"role": "super_admin", "disabled": {"$ne": True}}, {"id": 1}).to_list(50)
+    for sa in super_admins:
+        notify_user_ids.add(sa["id"])
+
+    # Selected Cluster Manager
+    cm_val = m.get("reporting_cluster_manager") or (m.get("extra_fields") or {}).get("reporting_cluster_manager")
+    if cm_val and isinstance(cm_val, str):
+        cm_u = await db.users.find_one({
+            "$or": [
+                {"name": {"$regex": f"^{re.escape(cm_val.strip())}$", "$options": "i"}},
+                {"email": cm_val.strip().lower()},
+                {"id": cm_val.strip()},
+            ],
+            "disabled": {"$ne": True}
+        }, {"id": 1})
+        if cm_u:
+            notify_user_ids.add(cm_u["id"])
+
+    # Admins from the same region
+    mp_reg = m.get("region")
+    admin_filter = {"role": "admin", "disabled": {"$ne": True}}
+    if mp_reg:
+        admin_filter["$or"] = [
+            {"region": mp_reg},
+            {"region_scope": mp_reg},
+            {"region": {"$in": ["", None]}, "region_scope": {"$in": [[], None]}}
+        ]
+    reg_admins = await db.users.find(admin_filter, {"id": 1}).to_list(100)
+    for ra in reg_admins:
+        notify_user_ids.add(ra["id"])
+
+    await notify(list(notify_user_ids), "New Application Submitted", f"{m['full_name']} ({mp_reg or 'Unassigned'}) application pending approval", f"/manpower/{mid}")
     await audit(current, "manpower.submit", mid)
     updated = await db.manpower.find_one({"id": mid}, {"_id": 0})
     fire_email("manpower_submitted", manpower=updated, actor=current)
