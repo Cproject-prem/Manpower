@@ -10,6 +10,17 @@ from app.utils import clean_doc, hash_password, new_id, now_iso
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+@router.get("/cluster-managers")
+async def list_cluster_managers(current=Depends(get_current_user)):
+    """Return all active Admin and Super Admin users to populate Cluster Manager dropdowns."""
+    _ = current
+    admins = await db.users.find(
+        {"role": {"$in": ["super_admin", "admin"]}, "disabled": {"$ne": True}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "region": 1, "region_scope": 1}
+    ).to_list(500)
+    return admins
+
+
 @router.get("")
 async def list_users(user=Depends(get_current_user)):
     if user["role"] == "super_admin":
@@ -71,7 +82,8 @@ async def create_user(payload: UserCreate, current=Depends(require_roles("super_
         "role": payload.role,
         "contractor_id": payload.contractor_id,
         "phone": payload.phone or "",
-        "region_scope": payload.region_scope if payload.role == "admin" else None,
+        "region": payload.region if payload.role == "admin" else None,
+        "region_scope": payload.region_scope or ([payload.region] if payload.region else []) if payload.role == "admin" else None,
         "disabled": False,
         "created_at": now_iso(),
         "created_by_id": current["id"],

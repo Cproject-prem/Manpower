@@ -23,6 +23,7 @@ export default function NewRegistration() {
   const [config, setConfig] = useState(null);
   const [contractors, setContractors] = useState([]);
   const [members, setMembers] = useState([]);
+  const [clusterManagers, setClusterManagers] = useState([]);
   const [regions, setRegions] = useState([]);
   const [values, setValues] = useState({});
   const [saving, setSaving] = useState(false);
@@ -55,6 +56,9 @@ export default function NewRegistration() {
     if (isAdmin || isVendorAdmin) {
       api.get("/users").then((r) => setMembers(r.data.filter((u) => u.role === "member")));
     }
+    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data)).catch(() => {
+      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "super_admin" || u.role === "admin"))).catch(() => {});
+    });
     api.get("/settings/regions").then((r) => setRegions(r.data.regions || [])).catch(() => setRegions([]));
     // eslint-disable-next-line
   }, [user]);
@@ -190,7 +194,7 @@ export default function NewRegistration() {
             section={section}
             values={displayValues}
             onChange={onChange}
-            context={{ contractors, members, isAdmin, currentRole: user?.role }}
+            context={{ contractors, members, clusterManagers, isAdmin, currentRole: user?.role }}
             disabledKeys={contractorLocked ? new Set(["contractor_id", "company_name"]) : undefined}
           />
         ))}

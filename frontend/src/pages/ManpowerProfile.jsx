@@ -48,6 +48,7 @@ export default function ManpowerProfile() {
   const [regions, setRegions] = useState([]);
   const [viewerDoc, setViewerDoc] = useState(null);
   const [members, setMembers] = useState([]);
+  const [clusterManagers, setClusterManagers] = useState([]);
   const [comment, setComment] = useState("");
   const [showApprove, setShowApprove] = useState(false);
   const [showReject, setShowReject] = useState(false);
@@ -102,6 +103,9 @@ export default function ManpowerProfile() {
     if (user?.role === "super_admin" || user?.role === "admin" || user?.role === "vendor_admin") {
       api.get("/users").then((r) => setMembers(r.data));
     }
+    api.get("/users/cluster-managers").then((r) => setClusterManagers(r.data)).catch(() => {
+      api.get("/users").then((r) => setClusterManagers(r.data.filter((u) => u.role === "super_admin" || u.role === "admin"))).catch(() => {});
+    });
     // eslint-disable-next-line
   }, [id]);
 
@@ -735,7 +739,22 @@ export default function ManpowerProfile() {
             <EditField k="state" label="State" form={editForm} setForm={setEditForm} />
             <EditField k="postal_code" label="Postal Code" form={editForm} setForm={setEditForm} />
             <EditField k="location" label="Location" form={editForm} setForm={setEditForm} />
-            <EditField k="reporting_cluster_manager" label="Cluster Manager" form={editForm} setForm={setEditForm} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-700">Cluster Manager</Label>
+              <select
+                value={editForm.reporting_cluster_manager || ""}
+                onChange={(e) => setEditForm({ ...editForm, reporting_cluster_manager: e.target.value })}
+                data-testid="edit-cluster-manager"
+                className="w-full h-9 rounded-md border border-zinc-300 px-3 text-sm bg-white"
+              >
+                <option value="">— Select cluster manager —</option>
+                {clusterManagers.map((cm) => (
+                  <option key={cm.id || cm.name} value={cm.name}>
+                    {cm.name}{cm.region ? ` (${cm.region})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <EditField k="work_state" label="Work State" form={editForm} setForm={setEditForm} />
             <EditField k="designation" label="Designation" form={editForm} setForm={setEditForm} />
             <EditField k="subvendor" label="Subvendor" form={editForm} setForm={setEditForm} />

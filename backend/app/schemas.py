@@ -16,6 +16,7 @@ class UserCreate(BaseModel):
     role: Literal["admin", "vendor_admin", "member", "manpower"]
     contractor_id: Optional[str] = None
     phone: Optional[str] = None
+    region: Optional[str] = None              # Assigned Region dropdown for Admin users
     region_scope: Optional[List[str]] = None  # For role="admin": empty/None = all regions
 
 
@@ -25,6 +26,7 @@ class UserUpdate(BaseModel):
     contractor_id: Optional[str] = None
     phone: Optional[str] = None
     disabled: Optional[bool] = None
+    region: Optional[str] = None
     region_scope: Optional[List[str]] = None
 
 

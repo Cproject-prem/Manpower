@@ -36,7 +36,7 @@ export default function DynamicFormFields({ section, values, onChange, context =
 }
 
 function FieldRenderer({ field, value, values = {}, onChange, context, disabled }) {
-  const { contractors = [], members = [], isAdmin = false } = context;
+  const { contractors = [], members = [], clusterManagers = [], isAdmin = false } = context;
   // Hide admin-only fields for non-admins
   if (field.admin_only && !isAdmin) return null;
   // "document" type is a file-upload slot, not a form input — surfaced only in the Documents tab.
@@ -102,6 +102,26 @@ function FieldRenderer({ field, value, values = {}, onChange, context, disabled 
         <SelectContent>
           {filteredMembers.map((m) => (
             <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  } else if (field.type === "cluster_manager" || field.key === "reporting_cluster_manager" || field.key === "cluster_manager") {
+    // Dropdown menu populated from users with Admin Access
+    control = (
+      <Select
+        value={value || ""}
+        onValueChange={(v) => onChange(field.key, v)}
+        disabled={isDisabled}
+      >
+        <SelectTrigger data-testid={testId}>
+          <SelectValue placeholder={clusterManagers.length === 0 ? "Select cluster manager" : "Select cluster manager"} />
+        </SelectTrigger>
+        <SelectContent>
+          {clusterManagers.map((cm) => (
+            <SelectItem key={cm.id || cm.name} value={cm.name}>
+              {cm.name}{cm.region ? ` (${cm.region})` : ""}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>

@@ -27,7 +27,7 @@ export default function Users() {
   const [showContractor, setShowContractor] = useState(false);
   const [resetUser, setResetUser] = useState(null);
   const [editUser, setEditUser] = useState(null);
-  const [newUser, setNewUser] = useState({ email: "", password: "", name: "", role: "member", contractor_id: "", phone: "", region_scope: [] });  const [newContractor, setNewContractor] = useState({ name: "", address: "", contact_person: "", phone: "", email: "" });
+  const [newUser, setNewUser] = useState({ email: "", password: "", name: "", role: "admin", contractor_id: "", phone: "", region: "", region_scope: [] });  const [newContractor, setNewContractor] = useState({ name: "", address: "", contact_person: "", phone: "", email: "" });
   const [resetPw, setResetPw] = useState("");
 
   const load = () => {
@@ -50,11 +50,18 @@ export default function Users() {
     try {
       const payload = { ...newUser };
       if (!payload.contractor_id) delete payload.contractor_id;
-      if (payload.role !== "admin") delete payload.region_scope;
+      if (payload.role !== "admin") {
+        delete payload.region;
+        delete payload.region_scope;
+      } else {
+        if (payload.region && (!payload.region_scope || payload.region_scope.length === 0)) {
+          payload.region_scope = [payload.region];
+        }
+      }
       await api.post("/users", payload);
       toast.success("User created");
       setShowNew(false);
-      setNewUser({ email: "", password: "", name: "", role: "member", contractor_id: "", phone: "", region_scope: [] });
+      setNewUser({ email: "", password: "", name: "", role: "admin", contractor_id: "", phone: "", region: "", region_scope: [] });
       load();
     } catch (e) { toast.error(formatApiError(e)); }
   };
@@ -86,13 +93,17 @@ export default function Users() {
 
   const saveEditUser = async () => {
     try {
-      const { id, role, contractor_id, name, phone, region_scope } = editUser;
+      const { id, role, contractor_id, name, phone, region, region_scope } = editUser;
       const body = { name, phone, contractor_id: contractor_id || null };
       // Only send role if it's editable (not super_admin)
       if (role && role !== "super_admin") body.role = role;
-      // region_scope: only meaningful for admin role — send [] to clear otherwise
-      if (role === "admin") body.region_scope = Array.isArray(region_scope) ? region_scope : [];
-      else body.region_scope = [];
+      if (role === "admin") {
+        body.region = region || (region_scope && region_scope[0]) || "";
+        body.region_scope = Array.isArray(region_scope) && region_scope.length > 0 ? region_scope : (region ? [region] : []);
+      } else {
+        body.region = null;
+        body.region_scope = [];
+      }
       await api.put(`/users/${id}`, body);
       toast.success("User updated");
       setEditUser(null); load();
@@ -174,14 +185,28 @@ export default function Users() {
                 )}
                 <Field label="Phone"><Input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} data-testid="user-phone" /></Field>
                 {newUser.role === "admin" && (
-                  <Field label="Region Scope (leave empty = all regions)">
-                    <RegionScopePicker
-                      regions={regions}
-                      value={newUser.region_scope || []}
-                      onChange={(v) => setNewUser({ ...newUser, region_scope: v })}
-                      testIdPrefix="new-user-region"
-                    />
-                  </Field>
+                  <>
+                    <Field label="Region (Admin Access)">
+                      <Select
+                        value={newUser.region || ""}
+                        onValueChange={(v) => setNewUser({
+                          ...newUser,
+                          region: v === "__all__" ? "" : v,
+                          region_scope: v === "__all__" || !v ? [] : [v]
+                        })}
+                      >
+                        <SelectTrigger data-testid="new-user-region-select">
+                          <SelectValue placeholder="Select region" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">All Regions (Unrestricted)</SelectItem>
+                          {regions.map((r) => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </>
                 )}
               </div>
               <DialogFooter>
@@ -200,6 +225,7 @@ export default function Users() {
               <th className="text-left py-2 px-4 font-medium">Name</th>
               <th className="text-left py-2 px-4 font-medium">Email</th>
               <th className="text-left py-2 px-4 font-medium">Role</th>
+              <th className="text-left py-2 px-4 font-medium">Region</th>
               <th className="text-left py-2 px-4 font-medium">Contractor</th>
               <th className="text-left py-2 px-4 font-medium">Status</th>
               <th></th>
@@ -211,6 +237,13 @@ export default function Users() {
                 <td className="py-3 px-4 font-medium text-zinc-900">{u.name}</td>
                 <td className="py-3 px-4 text-zinc-700 mono text-xs">{u.email}</td>
                 <td className="py-3 px-4"><span className="id-pill">{u.role}</span></td>
+                <td className="py-3 px-4 text-zinc-600">
+                  {u.role === "admin" ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                      {u.region || (u.region_scope?.length ? u.region_scope.join(", ") : "All Regions")}
+                    </span>
+                  ) : "—"}
+                </td>
                 <td className="py-3 px-4 text-zinc-600">
                   <span>{contractorName(u.contractor_id)}</span>
                   {(() => { const c = contractors.find((c) => c.id === u.contractor_id); return c?.vendor_id ? (
@@ -286,14 +319,28 @@ export default function Users() {
               </Field>
               )}
               {editUser.role === "admin" && (
-                <Field label="Region Scope (empty = all regions)">
-                  <RegionScopePicker
-                    regions={regions}
-                    value={editUser.region_scope || []}
-                    onChange={(v) => setEditUser({ ...editUser, region_scope: v })}
-                    testIdPrefix="edit-user-region"
-                  />
-                </Field>
+                <>
+                  <Field label="Region (Admin Access)">
+                    <Select
+                      value={editUser.region || (editUser.region_scope && editUser.region_scope[0]) || "__all__"}
+                      onValueChange={(v) => setEditUser({
+                        ...editUser,
+                        region: v === "__all__" ? "" : v,
+                        region_scope: v === "__all__" || !v ? [] : [v]
+                      })}
+                    >
+                      <SelectTrigger data-testid="edit-user-region-select">
+                        <SelectValue placeholder="Select region" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Regions (Unrestricted)</SelectItem>
+                        {regions.map((r) => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </>
               )}
             </div>
           )}

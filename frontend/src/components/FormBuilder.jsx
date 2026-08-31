@@ -22,6 +22,7 @@ const FIELD_TYPES = [
   { value: "select", label: "Select (Dropdown)" },
   { value: "contractor", label: "Contractor Selector" },
   { value: "member", label: "Member Selector" },
+  { value: "cluster_manager", label: "Cluster Manager (Admin Users)" },
   { value: "document", label: "Document Upload Slot" },
 ];
 
