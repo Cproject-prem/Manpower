@@ -247,12 +247,11 @@ function Chip({ label, onRemove }) {
 }
 
 const STATUS_COLS = [
-  { key: "total",            label: "Total",    cls: "text-zinc-800 font-semibold" },
-  { key: "active",           label: "Active",   cls: "text-emerald-700" },
-  { key: "expiring_soon",    label: "Expiring", cls: "text-orange-600" },
-  { key: "expired",          label: "Expired",  cls: "text-rose-700" },
-  { key: "renewal_pending",  label: "Renewal",  cls: "text-blue-700" },
-  { key: "pending_approval", label: "Pending",  cls: "text-amber-700" },
+  { key: "total",            label: "Total Deployed", cls: "text-zinc-800 font-semibold" },
+  { key: "active",           label: "Active",         cls: "text-emerald-700" },
+  { key: "expiring_soon",    label: "Expiring Soon",  cls: "text-orange-600" },
+  { key: "expired",          label: "Expired Docs",   cls: "text-rose-700" },
+  { key: "renewal_pending",  label: "Renewal Pending",cls: "text-blue-700" },
 ];
 
 function ReportTable({ title, data, resolveName }) {

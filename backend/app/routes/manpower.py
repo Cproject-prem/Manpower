@@ -492,11 +492,11 @@ async def delete_manpower(mid: str, current=Depends(get_current_user)):
     if not m:
         raise HTTPException(status_code=404, detail="Manpower record not found")
 
-    # Strict requirement: Can only delete if it is in draft status AND manpower_id has not been generated
-    if m.get("manpower_id") or m.get("status") != "draft":
+    # Strict requirement: Can delete if it is in draft or rejected status AND manpower_id has not been generated
+    if m.get("manpower_id") or m.get("status") not in ("draft", "rejected"):
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete manpower once ID is generated or record is not in draft state"
+            detail="Cannot delete manpower once ID is generated or record is not in draft/rejected state"
         )
 
     # Delete any uploaded document files from disk
@@ -513,8 +513,9 @@ async def delete_manpower(mid: str, current=Depends(get_current_user)):
                     pass
 
     await db.manpower.delete_one({"id": mid})
-    await audit(current, "manpower.delete", mid, {"full_name": m.get("full_name"), "status": "draft"})
-    return {"status": "ok", "message": "Draft manpower deleted successfully"}
+    status_label = m.get("status", "draft")
+    await audit(current, "manpower.delete", mid, {"full_name": m.get("full_name"), "status": status_label})
+    return {"status": "ok", "message": f"{status_label.capitalize()} manpower deleted successfully"}
 
 
 

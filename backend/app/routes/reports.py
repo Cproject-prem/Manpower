@@ -42,6 +42,12 @@ async def report_summary(
     user=Depends(require_roles("super_admin", "admin", "vendor_admin", "member")),
 ):
     base_f = await filter_for_user(user)
+    # Strictly filter for approved and active manpower only in Workforce Deployment
+    base_f["disabled"] = {"$ne": True}
+    base_f["is_active"] = {"$ne": False}
+    base_f["status"] = "active"
+    base_f["manpower_id"] = {"$exists": True, "$ne": "", "$nin": [None, ""]}
+
     f = _apply_extra_filters(base_f, contractor_id, member_id, location, region)
     items = await db.manpower.find(f, {"_id": 0}).to_list(5000)
 
@@ -49,7 +55,6 @@ async def report_summary(
 
     for it in items:
         from app.helpers import doc_status
-        s = compute_dynamic_status(it)
         d_s = doc_status(it)
         
         for bucket, val in [(by_contractor, it.get("contractor_id")), 
@@ -59,12 +64,9 @@ async def report_summary(
             key = val or "Unassigned"
             if key not in bucket:
                 bucket[key] = {"total": 0, "active": 0, "expiring_soon": 0, "expired": 0,
-                               "renewal_pending": 0, "pending_approval": 0, "rejected": 0, "draft": 0}
+                               "renewal_pending": 0}
             bucket[key]["total"] += 1
-            
-            # Workflow status
-            if s in bucket[key]:
-                bucket[key][s] += 1
+            bucket[key]["active"] += 1
                 
             # Expiry status from doc_status
             if d_s in ["expired", "expiring_soon", "renewal_pending"]:
@@ -98,6 +100,12 @@ async def export_report(
     user=Depends(require_roles("super_admin", "admin", "vendor_admin", "member")),
 ):
     base_f = await filter_for_user(user)
+    # Strictly filter for approved and active manpower only in Workforce Deployment export
+    base_f["disabled"] = {"$ne": True}
+    base_f["is_active"] = {"$ne": False}
+    base_f["status"] = "active"
+    base_f["manpower_id"] = {"$exists": True, "$ne": "", "$nin": [None, ""]}
+
     f = _apply_extra_filters(base_f, contractor_id, member_id, location, region)
     items = await db.manpower.find(f, {"_id": 0}).to_list(5000)
 

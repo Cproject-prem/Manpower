@@ -93,13 +93,15 @@ export default function ManpowerList() {
   const contractorName = (id) => contractors.find((c) => c.id === id)?.name || "—";
 
   const handleDelete = async (m) => {
-    if (!window.confirm(`Delete draft record for "${m.full_name || 'Draft'}"? This action cannot be undone.`)) return;
+    const isRejected = m.status === "rejected";
+    const label = isRejected ? "rejected submission" : "draft record";
+    if (!window.confirm(`Delete ${label} for "${m.full_name || 'Manpower'}"? This action cannot be undone.`)) return;
     try {
       await api.delete(`/manpower/${m.id}`);
-      toast.success("Draft manpower deleted successfully");
+      toast.success(`${isRejected ? "Rejected submission" : "Draft"} deleted successfully`);
       load();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Failed to delete draft");
+      toast.error(e?.response?.data?.detail || "Failed to delete record");
     }
   };
 
@@ -264,13 +266,13 @@ export default function ManpowerList() {
                 <td className="py-3 px-4 text-zinc-600">{memberName(m.assigned_member_id, m)}</td>
                 <td className="py-3 px-4 text-zinc-500 text-xs">{m.updated_at?.slice(0, 10)}</td>
                 <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                  {m.status === "draft" ? (
+                  {m.status === "draft" || m.status === "rejected" ? (
                     !m.manpower_id ? (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs font-medium cursor-pointer"
-                        title="Delete draft registration"
+                        title={m.status === "rejected" ? "Delete rejected submission" : "Delete draft registration"}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleDelete(m);

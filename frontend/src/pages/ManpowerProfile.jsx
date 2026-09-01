@@ -85,11 +85,13 @@ export default function ManpowerProfile() {
     }
   };
 
-  const deleteDraft = async () => {
-    if (!window.confirm("Are you sure you want to delete this draft manpower record? This action cannot be undone.")) return;
+  const deleteRecord = async () => {
+    const isRejected = m?.status === "rejected";
+    const label = isRejected ? "rejected submission" : "draft manpower record";
+    if (!window.confirm(`Are you sure you want to delete this ${label}? This action cannot be undone.`)) return;
     try {
       await api.delete(`/manpower/${m.id}`);
-      toast.success("Draft manpower deleted successfully");
+      toast.success(`${isRejected ? "Rejected submission" : "Draft manpower"} deleted successfully`);
       navigate("/manpower");
     } catch (e) {
       toast.error(formatApiError(e));
@@ -485,15 +487,15 @@ export default function ManpowerProfile() {
               {m.user_id ? `Linked: ${linkedUser?.name || "User"}` : "Link Login"}
             </Button>
           )}
-          {m.status === "draft" && (
+          {(m.status === "draft" || m.status === "rejected") && (
             !m.manpower_id ? (
               <Button
                 variant="outline"
-                onClick={deleteDraft}
-                data-testid="delete-draft-btn"
+                onClick={deleteRecord}
+                data-testid="delete-btn"
                 className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
               >
-                <Trash2 size={14} className="mr-1.5" /> Delete Draft
+                <Trash2 size={14} className="mr-1.5" /> {m.status === "rejected" ? "Delete Rejected" : "Delete Draft"}
               </Button>
             ) : (
               <Button
